@@ -428,7 +428,7 @@ function handleAttendance_(cq) {
 
   var noChange = !rec.isFirst && rec.prevStatus === status;
   tgAnswerCallback_(cq.id, noChange
-    ? ('이미 ' + statusKr + '(으)로 기록되어 있습니다 😊')
+    ? ('이미 ' + statusKr + '(으)로 기록되어 있습니다 😊 맨 아래 명단에서 확인하실 수 있어요.')
     : (ev.name + ' ' + statusKr + '(으)로 기록했습니다. 감사합니다!'));
 
   // 시트에 저장된 매칭값을 우선 사용(수동 연결 포함) → 호칭·표기 일관
@@ -488,8 +488,9 @@ function handleAttendance_(cq) {
       ' (id <code>' + from.id + '</code>)\n→ members 시트의 matched_aho/matched_name 에 직접 입력해 연결해 주세요.');
   }
 
-  // (d) 실시간 출석 보드를 단톡 최하단에 다시 띄움 — 실제 변경일 때만(누른 순서로 명단 갱신)
-  if (isFirst || rec.prevStatus !== status) floatBoard_();
+  // (d) 실시간 출석 보드를 단톡 최하단에 다시 띄움 — 회원이 본인 응답을 즉시 확인하도록 항상 갱신
+  //     (이전 보드는 삭제 후 재게시하는 단일 보드라 도배되지 않음. 재클릭 시 무반응 혼란 방지)
+  floatBoard_();
 }
 
 /** 회원 명칭: [현 직책 ]아호 이름[(역대회장/동호회장)] (예: 차기회장 찰수 서상일(골프회장)) */
