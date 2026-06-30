@@ -97,6 +97,8 @@ function handleMessage_(msg) {
       case '/board':     cmdBoard_(chat, from); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
+      case '/whois': cmdWhois_(chat, from, text); break;
+      case '/setmatch': cmdSetMatch_(chat, from, text); break;
       case '/diag': cmdDiag_(chat, from); break;
       default: break;
     }
@@ -382,6 +384,35 @@ function cmdDiag_(chat, from) {
     lines.push('임원방 전송: ' + (res && res.ok ? '✅ 성공' : '❌ 실패 — ' + (res && (res.description || res.raw))));
   }
   tgSend_(chat.id, lines.join('\n'));
+}
+
+/** (관리자) 회원 조회: 텔레그램이름·아호·성명 일부로 검색 → user_id + 현재 매칭 표시 */
+function cmdWhois_(chat, from, text) {
+  if (!requireAdmin_(chat, from)) return;
+  var q = stripBandCmd_(text);
+  if (!q) { tgSend_(chat.id, '사용법: <b>/whois 검색어</b> (텔레그램이름·아호·성명 일부)\n예) /whois 송'); return; }
+  var hits = getActiveMembers_().filter(function (m) {
+    return [m.full_name, m.username, m.aho, m.name].join(' ').indexOf(q) !== -1;
+  });
+  if (!hits.length) { tgSend_(chat.id, '"' + escapeHtml_(q) + '" 검색 결과 없음'); return; }
+  var lines = hits.map(function (m) {
+    return '• id <code>' + m.user_id + '</code>\n  텔레그램: ' + escapeHtml_(m.full_name || m.username || '(없음)') +
+      '\n  현재 매칭: ' + (m.name ? escapeHtml_((m.aho ? m.aho + ' ' : '') + m.name) : '(미매칭)');
+  });
+  tgSend_(chat.id, '🔎 <b>회원 조회</b> "' + escapeHtml_(q) + '"\n' + lines.join('\n') +
+    '\n\n✏️ 수정: <code>/setmatch user_id 아호 성명</code>');
+}
+
+/** (관리자) 매칭 수정: /setmatch <user_id> <아호> <성명> → 시트의 matched_aho/name 고정(confirmed=Y) */
+function cmdSetMatch_(chat, from, text) {
+  if (!requireAdmin_(chat, from)) return;
+  var parts = text.trim().split(/\s+/);   // /setmatch id 아호 성명…
+  if (parts.length < 4) { tgSend_(chat.id, '사용법: <b>/setmatch user_id 아호 성명</b>\n예) /setmatch 12345678 한결 송선호'); return; }
+  var uid = parts[1], aho = parts[2], name = parts.slice(3).join(' ');
+  var ok = setMemberMatch_(uid, aho, name);
+  tgSend_(chat.id, ok
+    ? ('✅ 매칭 수정 완료\nid ' + uid + ' → <b>' + escapeHtml_(aho + ' ' + name) + '</b>\n(이후 보드·보고·예우에 반영, 자동매칭이 덮어쓰지 않음)')
+    : ('❌ 해당 user_id 회원을 찾지 못했습니다: ' + escapeHtml_(uid)));
 }
 
 /** 보기 버튼: 전체 명단을 임원방에 직접 게시 → 임원·사무장 모두 함께 봄(1:1/start 불필요).
