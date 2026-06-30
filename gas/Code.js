@@ -353,7 +353,14 @@ function cmdMembers_(chat, from) {
 // ───────────────────────────────────── 버튼(콜백) 처리
 function handleCallback_(cq) {
   var data = cq.data || '';
-  if (data === 'refresh') { tgAnswerCallback_(cq.id, '현황을 새로 띄웠습니다.'); floatOfficerBoard_(); return; }
+  if (data === 'refresh') {
+    var rc = CacheService.getScriptCache();
+    if (rc.get('REFRESH_DEBOUNCE')) { tgAnswerCallback_(cq.id, '방금 갱신했습니다. 맨 아래 현황을 확인해 주세요 👇'); return; }
+    rc.put('REFRESH_DEBOUNCE', '1', 8);
+    tgAnswerCallback_(cq.id, '현황을 새로 띄웠습니다.');
+    floatOfficerBoard_();
+    return;
+  }
   if (data === 'view:attend') { handleView_(cq, 'attend'); return; }
   if (data === 'view:absent') { handleView_(cq, 'absent'); return; }
   if (data === 'view:noresp') { handleView_(cq, 'no_response'); return; }
@@ -383,7 +390,12 @@ function handleView_(cq, kind) {
   var officerChat = getOfficerChatId_();
   if (!officerChat) { tgAnswerCallback_(cq.id, '임원방이 설정되어 있지 않습니다.', true); return; }
   var label = kind === 'attend' ? '참석' : (kind === 'absent' ? '불참' : '미응답');
-  // ① 버튼 응답을 먼저 즉시 처리 — 연타/동시클릭으로 처리가 밀려도 콜백 만료('번쩍')를 막는다.
+  // ① 디바운스: 같은 보기를 방금(8초내) 올렸으면 무거운 작업 없이 즉시 종료 → 연타해도 한 번만, 빠르게.
+  var cache = CacheService.getScriptCache();
+  var dk = 'VIEW_DEBOUNCE_' + kind;
+  if (cache.get(dk)) { tgAnswerCallback_(cq.id, label + ' 명단은 임원방 아래에 이미 떠 있습니다 👇'); return; }
+  cache.put(dk, '1', 8);
+  // ② 버튼 응답을 먼저 즉시 처리 — 처리가 밀려도 콜백 만료('번쩍')를 막는다.
   tgAnswerCallback_(cq.id, label + ' 명단을 임원방에 띄웁니다.');
   // ② 명단 게시는 콜백 성공 여부와 무관하게 임원방에 직접 게시 → 모든 임원·사무장이 함께 봄.
   var text;
