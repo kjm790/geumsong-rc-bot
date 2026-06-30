@@ -51,6 +51,22 @@ function handleUpdate_(update) {
  */
 function dedupeUpdate_(updateId) {
   if (updateId == null) return true;
+  // CacheService 기반(잠금 없음) — 302 재시도가 몰려도 전역 잠금 경합/정체가 없다.
+  // 같은 update_id는 6시간 동안 한 번만 통과(텔레그램 재시도 기간 충분히 커버).
+  try {
+    var cache = CacheService.getScriptCache();
+    var k = 'U' + updateId;
+    if (cache.get(k)) return false;        // 이미 처리됨
+    cache.put(k, '1', 21600);              // 6h
+    return true;
+  } catch (e) {
+    return true;                            // 캐시 오류 시에도 처리는 진행(드롭 방지)
+  }
+}
+
+/** (구) Script Property + 25초 잠금 방식 — 정체 유발로 폐기. 잔존 호출 없음. */
+function dedupeUpdateOld_(updateId) {
+  if (updateId == null) return true;
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return true; }  // 잠금 실패 시 일단 처리
   try {
@@ -504,13 +520,14 @@ function handleAttendance_(cq) {
   dcache.put(dkey, status, 6);
 
   var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  var locked = false;
+  try { lock.waitLock(6000); locked = true; } catch (e) { locked = false; }  // 잠금 실패해도 진행(연타는 위 디바운스가 차단)
   var rec;
   try {
     upsertMember_(from.id, from.username || '', fullName);   // 자동 등록 + 자동매칭
     rec = recordAttendance_(eventKey, meetingDate, from.id, status);
   } finally {
-    lock.releaseLock();
+    if (locked) { try { lock.releaseLock(); } catch (e) {} }
   }
   var isFirst = rec.isFirst;
 
