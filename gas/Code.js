@@ -463,6 +463,13 @@ function handleAttendance_(cq) {
   var statusKr = status === 'attend' ? '참석' : '불참';
   var fullName = ((from.first_name || '') + ' ' + (from.last_name || '')).trim();
 
+  // 연타 방지: 같은 사람이 같은 버튼을 6초내 다시 누르면 무거운 처리(기록·보드재게시) 생략하고 즉시 응답.
+  // 큐 쌓임·보드 도배·콜백 만료('번쩍')를 예방. 상태를 바꾼 경우(참석↔불참)는 값이 달라 차단 안 됨.
+  var dcache = CacheService.getScriptCache();
+  var dkey = 'ATT_' + from.id + '_' + eventKey;
+  if (dcache.get(dkey) === status) { tgAnswerCallback_(cq.id, '이미 ' + statusKr + ' 처리됐습니다 😊'); return; }
+  dcache.put(dkey, status, 6);
+
   var lock = LockService.getScriptLock();
   lock.waitLock(15000);
   var rec;
