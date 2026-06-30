@@ -30,8 +30,16 @@ function doGet() {
 function handleUpdate_(update) {
   // 텔레그램이 같은 업데이트를 재시도(웹훅 302 등)해도 한 번만 처리 — 중복 발송 방지
   if (!dedupeUpdate_(update.update_id)) return;
-  if (update.callback_query) { handleCallback_(update.callback_query); return; }
-  if (update.message)        { handleMessage_(update.message); return; }
+  try {
+    if (update.callback_query) { handleCallback_(update.callback_query); return; }
+    if (update.message)        { handleMessage_(update.message); return; }
+  } catch (err) {
+    Logger.log('handleUpdate_ 오류: ' + err + '\n' + (err && err.stack));
+    try {
+      var admins = getAdminIds_();
+      if (admins.length) tgSend_(admins[0], '⚠️ <b>봇 처리 오류</b>\n<code>' + escapeHtml_(String(err)) + '</code>');
+    } catch (e2) {}
+  }
 }
 
 /**
@@ -89,6 +97,7 @@ function handleMessage_(msg) {
       case '/board':     cmdBoard_(chat, from); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
+      case '/diag': cmdDiag_(chat, from); break;
       default: break;
     }
     return;
@@ -352,18 +361,40 @@ function handleCallback_(cq) {
   tgAnswerCallback_(cq.id, '');
 }
 
+/** (관리자) 진단: 설정값 + 임원방 실제 전송 테스트 결과를 보고 */
+function cmdDiag_(chat, from) {
+  if (!requireAdmin_(chat, from)) return;
+  var grp = getGroupChatId_();
+  var off = getOfficerChatId_();
+  var lines = ['🔧 <b>진단</b>',
+    'GROUP_CHAT_ID: <code>' + grp + '</code>',
+    'OFFICER_CHAT_ID: <code>' + (off || '(미설정)') + '</code>',
+    'ADMIN_IDS: <code>' + getAdminIds_().join(',') + '</code>'];
+  if (off) {
+    var res = tgApi_('sendMessage', { chat_id: off, text: '🔧 임원방 전송 테스트입니다 (진단용).' });
+    lines.push('임원방 전송: ' + (res && res.ok ? '✅ 성공' : '❌ 실패 — ' + (res && (res.description || res.raw))));
+  }
+  tgSend_(chat.id, lines.join('\n'));
+}
+
 /** 보기 버튼: 전체 명단을 임원방에 직접 게시 → 임원·사무장 모두 함께 봄(1:1/start 불필요).
  *  이전 보기글은 삭제 후 재게시(임원방 도배 방지). */
 function handleView_(cq, kind) {
   var officerChat = getOfficerChatId_();
-  if (!officerChat) { tgAnswerCallback_(cq.id, '임원방이 설정되어 있지 않습니다.'); return; }
+  if (!officerChat) { tgAnswerCallback_(cq.id, '임원방이 설정되어 있지 않습니다.', true); return; }
+  var label = kind === 'attend' ? '참석' : (kind === 'absent' ? '불참' : '미응답');
+  // ① 버튼 응답을 먼저 즉시 처리 — 연타/동시클릭으로 처리가 밀려도 콜백 만료('번쩍')를 막는다.
+  tgAnswerCallback_(cq.id, label + ' 명단을 임원방에 띄웁니다.');
+  // ② 명단 게시는 콜백 성공 여부와 무관하게 임원방에 직접 게시 → 모든 임원·사무장이 함께 봄.
+  var text;
+  try { text = buildViewFull_(kind); }
+  catch (e) { tgSend_(officerChat, '⚠️ 명단 작성 오류: ' + escapeHtml_(String(e))); return; }
   var key = 'OFFICER_VIEW_MSG';
   var prev = props_().getProperty(key);
   if (prev) tgApi_('deleteMessage', { chat_id: officerChat, message_id: parseInt(prev, 10) });
-  var res = tgSend_(officerChat, buildViewFull_(kind));
+  var res = tgSend_(officerChat, text);
   if (res && res.ok && res.result) props_().setProperty(key, String(res.result.message_id));
-  var label = kind === 'attend' ? '참석' : (kind === 'absent' ? '불참' : '미응답');
-  tgAnswerCallback_(cq.id, label + ' 전체 명단을 임원방 아래에 띄웠습니다.');
+  else tgSend_(officerChat, '⚠️ 명단 게시 실패: ' + (res && (res.description || res.raw) || '알 수 없음'));
 }
 
 /** 전체 명단(개인 메시지용, 길이 제한 없음). kind: attend/absent/no_response */
