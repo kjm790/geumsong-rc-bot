@@ -409,10 +409,12 @@ function cmdSetMatch_(chat, from, text) {
   var parts = text.trim().split(/\s+/);   // /setmatch id 아호 성명…
   if (parts.length < 4) { tgSend_(chat.id, '사용법: <b>/setmatch user_id 아호 성명</b>\n예) /setmatch 12345678 한결 송선호'); return; }
   var uid = parts[1], aho = parts[2], name = parts.slice(3).join(' ');
-  var ok = setMemberMatch_(uid, aho, name);
-  tgSend_(chat.id, ok
-    ? ('✅ 매칭 수정 완료\nid ' + uid + ' → <b>' + escapeHtml_(aho + ' ' + name) + '</b>\n(이후 보드·보고·예우에 반영, 자동매칭이 덮어쓰지 않음)')
-    : ('❌ 해당 user_id 회원을 찾지 못했습니다: ' + escapeHtml_(uid)));
+  var n = setMemberMatch_(uid, aho, name);
+  if (!n) { tgSend_(chat.id, '❌ 해당 user_id 회원을 찾지 못했습니다: <code>' + escapeHtml_(uid) + '</code>\n/whois 로 정확한 id를 다시 확인해 주세요.'); return; }
+  var after = getMemberById_(uid);   // 저장 후 실제 값 재확인
+  var now = after && after.name ? (after.aho ? after.aho + ' ' : '') + after.name : '(읽기 실패)';
+  floatBoard_();                     // 보드도 즉시 갱신
+  tgSend_(chat.id, '✅ 매칭 수정 완료 (' + n + '개 행)\nid ' + uid + ' → <b>' + escapeHtml_(now) + '</b>\n단톡 보드도 새로 띄웠습니다.');
 }
 
 /** 보기 버튼: 전체 명단을 임원방에 직접 게시 → 임원·사무장 모두 함께 봄(1:1/start 불필요).
