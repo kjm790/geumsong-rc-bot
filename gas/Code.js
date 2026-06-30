@@ -352,18 +352,18 @@ function handleCallback_(cq) {
   tgAnswerCallback_(cq.id, '');
 }
 
-/** 보기 버튼: 누른 임원의 1:1(개인) 대화로 전체 명단 전송. 1:1 미개설이면 팝업(요약)+안내. */
+/** 보기 버튼: 전체 명단을 임원방에 직접 게시 → 임원·사무장 모두 함께 봄(1:1/start 불필요).
+ *  이전 보기글은 삭제 후 재게시(임원방 도배 방지). */
 function handleView_(cq, kind) {
-  var from = cq.from;
-  var res = tgApi_('sendMessage', {
-    chat_id: from.id, text: buildViewFull_(kind), parse_mode: 'HTML', disable_web_page_preview: true
-  });
-  if (res && res.ok) {
-    tgAnswerCallback_(cq.id, '📩 전체 명단을 1:1(개인) 대화로 보냈습니다. 확인해 주세요.');
-  } else {
-    // 1:1 미개설(봇 /start 안 함) → 팝업 요약 + 안내
-    tgAnswerCallback_(cq.id, buildViewText_(kind) + '\n\n전체를 받으려면 @geumsong_secretary_bot 과 1:1에서 /start 후 다시 눌러주세요.', true);
-  }
+  var officerChat = getOfficerChatId_();
+  if (!officerChat) { tgAnswerCallback_(cq.id, '임원방이 설정되어 있지 않습니다.'); return; }
+  var key = 'OFFICER_VIEW_MSG';
+  var prev = props_().getProperty(key);
+  if (prev) tgApi_('deleteMessage', { chat_id: officerChat, message_id: parseInt(prev, 10) });
+  var res = tgSend_(officerChat, buildViewFull_(kind));
+  if (res && res.ok && res.result) props_().setProperty(key, String(res.result.message_id));
+  var label = kind === 'attend' ? '참석' : (kind === 'absent' ? '불참' : '미응답');
+  tgAnswerCallback_(cq.id, label + ' 전체 명단을 임원방 아래에 띄웠습니다.');
 }
 
 /** 전체 명단(개인 메시지용, 길이 제한 없음). kind: attend/absent/no_response */
@@ -607,7 +607,7 @@ function floatOfficerBoard_() {
       '   ✅ <b>' + s.attend.length + '</b>  ·  ❌ <b>' + s.absent.length + '</b>  ·  ❔ <b>' + s.no_response.length + '</b>';
   });
   var text = '⚙️ <b>임원용 실시간 현황</b>\n' + UI_LINE + '\n' + blocks.join('\n\n') +
-    '\n' + UI_LINE + '\n🔎 <i>불참·미응답 명단은 버튼을 누른 분만 1:1로 받습니다</i>\n' + UI_SLOGAN;
+    '\n' + UI_LINE + '\n🔎 <i>버튼을 누르면 전체 명단이 임원방에 표시됩니다 (누구나 가능)</i>\n' + UI_SLOGAN;
   var kb = { inline_keyboard: [
     [ { text: '✅ 참석 보기', callback_data: 'view:attend' } ],
     [ { text: '❌ 불참 보기', callback_data: 'view:absent' }, { text: '❔ 미응답 보기', callback_data: 'view:noresp' } ],
