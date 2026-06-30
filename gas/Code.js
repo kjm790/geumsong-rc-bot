@@ -412,6 +412,11 @@ function handleAttendance_(cq) {
   var ev = getEventByKey_(eventKey);
   if (!ev) { tgAnswerCallback_(cq.id, '알 수 없는 행사입니다.'); return; }
 
+  // 버튼에 박힌 회차 날짜가 지난 회차(옛 출석조사 버튼)면 현재 회차로 보정 →
+  // 보드가 보여주는 회차와 항상 일치(이전 버튼 눌러 명단에 안 뜨던 문제 방지).
+  var currentMeeting = nextMeetingDate_(todayStr_(), ev.weekday, ev.nth);
+  if (meetingDate !== currentMeeting) meetingDate = currentMeeting;
+
   var statusKr = status === 'attend' ? '참석' : '불참';
   var fullName = ((from.first_name || '') + ' ' + (from.last_name || '')).trim();
 
