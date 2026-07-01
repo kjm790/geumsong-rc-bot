@@ -494,6 +494,19 @@ function buildViewText_(kind) {
   return text;
 }
 
+/** 불참 → 참석으로 마음 바꿨을 때 재미있는 환영 메시지(seed로 변형 선택) */
+function changedToAttendMsg_(who, seed) {
+  var msgs = [
+    '와~ ' + who + ' 님 마음 바꿔 <b>참석</b>! 🎉 역시 빈자리가 꽉 찼습니다, 환영합니다! 🙌',
+    '반전 드라마! ' + who + ' 님 불참 → <b>참석</b> 🎊 오늘 모임 흥행 보증수표 등장!',
+    who + ' 님 <b>참석</b>으로 갈아타기 성공 🚀 현명한 선택이십니다 😎 기다리고 있었어요!',
+    who + ' 님이 돌아오셨습니다! ✨ 불참은 없던 일로, <b>참석</b>으로 모십니다 👏',
+    '두구두구… ' + who + ' 님 <b>참석</b> 변경 접수! 🔥 안 오시면 섭섭할 뻔했어요 😄',
+    who + ' 님 마음을 돌리셨군요! 💖 그 한 표가 모임을 더 빛나게 합니다, <b>참석</b> 감사합니다!'
+  ];
+  return msgs[Math.abs(seed) % msgs.length];
+}
+
 /** 출석 버튼 처리 (att:<eventKey>:<meetingDate>:<status>) */
 function handleAttendance_(cq) {
   var from = cq.from;
@@ -563,6 +576,10 @@ function handleAttendance_(cq) {
           var who = (clubRole_(member.name) || subTitle_(member.name)) ? memberHonorific_(member) : addr;
           tgSend_(grp, '[' + ev.name + '] ' + praiseMessage_(who, status, seed));
         }
+      } else if (rec.prevStatus === 'absent') {
+        // 불참 → 참석으로 변경: 재미있는 환영(마음 바꿔 와주셔서 감사)
+        var who2 = (isPresident || pastTitle || clubRole_(member.name) || subTitle_(member.name)) ? memberHonorific_(member) : addr;
+        tgSend_(grp, '[' + ev.name + '] ' + changedToAttendMsg_(who2, seed));
       }
     } else { // 불참
       if (ev.key === 'event1') {
@@ -576,6 +593,10 @@ function handleAttendance_(cq) {
       }
     }
   }
+
+  // (d) 회원 보드 먼저 갱신 — 회원이 본인 응답(참석↔불참 변경 포함)을 즉시 확인하도록 항상 재게시.
+  //     임원 보고보다 앞서 처리해 회원 체감 속도를 높임(이전 보드 삭제 후 재게시라 도배 아님).
+  floatBoard_();
 
   // (c) 임원방 보고 — 실제 변경(신규/상태변경)일 때만: 한 줄 알림 + 불참·미응답 실시간 보드 갱신
   if (SETTINGS.reportToOfficers && getOfficerChatId_() && (isFirst || rec.prevStatus !== status)) {
@@ -592,10 +613,6 @@ function handleAttendance_(cq) {
     tgSend_(getOfficerChatId_(), '⚠️ <b>명부 미매칭 응답</b>: ' + displayName_(fullName, from.username) +
       ' (id <code>' + from.id + '</code>)\n→ members 시트의 matched_aho/matched_name 에 직접 입력해 연결해 주세요.');
   }
-
-  // (d) 실시간 출석 보드를 단톡 최하단에 다시 띄움 — 회원이 본인 응답을 즉시 확인하도록 항상 갱신
-  //     (이전 보드는 삭제 후 재게시하는 단일 보드라 도배되지 않음. 재클릭 시 무반응 혼란 방지)
-  floatBoard_();
 }
 
 /** 회원 명칭: [현 직책 ]아호 이름[(역대회장/동호회장)] (예: 차기회장 찰수 서상일(골프회장)) */
