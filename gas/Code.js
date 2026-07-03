@@ -440,13 +440,13 @@ function ensureHealTrigger_() {
   return true;
 }
 
-/** 자동복구: 밀린 큐가 임계(6)를 넘으면 비운다. 1분 트리거에서 호출.
+/** 자동복구: 밀린 큐가 임계(3)를 넘으면 비운다. 1분 트리거에서 호출.
  *  (302 재시도로 적체돼 새 명령/응답이 막히는 상태를 스스로 해소) */
 function healWebhook_() {
   try {
     var info = tgApi_('getWebhookInfo', {});
     var pending = (info && info.result) ? (info.result.pending_update_count || 0) : 0;
-    if (pending > 6) {
+    if (pending > 3) {
       var url = getProp_('WEBHOOK_URL', false);
       if (url) tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
     }
