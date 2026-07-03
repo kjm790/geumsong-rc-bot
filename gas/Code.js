@@ -23,7 +23,14 @@ function doPost(e) {
   return ContentService.createTextOutput('ok');
 }
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.diag === 'gs1') {   // 읽기 전용 상태 진단(민감정보 없음)
+    var out = [];
+    try { out.push('triggers=' + ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }).join(',')); }
+    catch (er) { out.push('triggers_ERR=' + er); }
+    out.push('WEBHOOK_URL_set=' + !!getProp_('WEBHOOK_URL', false));
+    return ContentService.createTextOutput(out.join('\n'));
+  }
   return ContentService.createTextOutput('AI사무장봇 작동 중');
 }
 
@@ -423,13 +430,20 @@ function cmdAudit_(chat, from) {
 /** (관리자) 밀린 웹훅 업데이트 큐 즉시 비우기 + 자동복구 트리거 설치 */
 function cmdFlush_(chat, from) {
   if (!requireAdmin_(chat, from)) return;
-  var url = getProp_('WEBHOOK_URL', false);
-  if (!url) { tgSend_(chat.id, '❌ WEBHOOK_URL 미설정 — 비울 수 없습니다.'); return; }
+  var url = webhookUrl_();
+  if (!url) { tgSend_(chat.id, '❌ 웹훅 URL 판별 실패 — 비울 수 없습니다.'); return; }
   var res = tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
   var healOn = ensureHealTrigger_();
   tgSend_(chat.id, (res && res.ok)
     ? '✅ 밀린 업데이트 큐를 비웠습니다.\n🔄 자동복구 ' + (healOn ? '켜짐(1분마다 점검·복구)' : '이미 켜져 있음') + ' — 앞으로 밀려도 스스로 복구합니다.'
     : '❌ 실패: ' + (res && (res.description || res.raw)));
+}
+
+/** 웹훅 URL: WEBHOOK_URL 속성 우선, 없으면 현재 웹앱 URL(/exec)로 자동 판별 */
+function webhookUrl_() {
+  var u = getProp_('WEBHOOK_URL', false);
+  if (u) return u;
+  try { return ScriptApp.getService().getUrl(); } catch (e) { return null; }
 }
 
 /** 자동복구 트리거(1분마다 healWebhook_) 설치(없으면). 새로 만들었으면 true */
@@ -447,7 +461,7 @@ function healWebhook_() {
     var info = tgApi_('getWebhookInfo', {});
     var pending = (info && info.result) ? (info.result.pending_update_count || 0) : 0;
     if (pending > 3) {
-      var url = getProp_('WEBHOOK_URL', false);
+      var url = webhookUrl_();
       if (url) tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
     }
   } catch (e) { Logger.log('healWebhook_ 오류: ' + e); }
