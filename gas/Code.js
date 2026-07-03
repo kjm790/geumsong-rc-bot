@@ -402,21 +402,35 @@ function cmdDiag_(chat, from) {
   tgSend_(chat.id, lines.join('\n'));
 }
 
-/** (관리자) 회원 조회: 텔레그램이름·아호·성명 일부로 검색 → user_id + 현재 매칭 표시 */
+/** (관리자) 회원 조회: 텔레그램이름·아호·성명 일부로 검색 → user_id·매칭·활성·출석기록 표시(비활성 포함) */
 function cmdWhois_(chat, from, text) {
   if (!requireAdmin_(chat, from)) return;
   var q = stripBandCmd_(text);
-  if (!q) { tgSend_(chat.id, '사용법: <b>/whois 검색어</b> (텔레그램이름·아호·성명 일부)\n예) /whois 송'); return; }
-  var hits = getActiveMembers_().filter(function (m) {
-    return [m.full_name, m.username, m.aho, m.name].join(' ').indexOf(q) !== -1;
-  });
-  if (!hits.length) { tgSend_(chat.id, '"' + escapeHtml_(q) + '" 검색 결과 없음'); return; }
-  var lines = hits.map(function (m) {
-    return '• id <code>' + m.user_id + '</code>\n  텔레그램: ' + escapeHtml_(m.full_name || m.username || '(없음)') +
-      '\n  현재 매칭: ' + (m.name ? escapeHtml_((m.aho ? m.aho + ' ' : '') + m.name) : '(미매칭)');
-  });
-  tgSend_(chat.id, '🔎 <b>회원 조회</b> "' + escapeHtml_(q) + '"\n' + lines.join('\n') +
-    '\n\n✏️ 수정: <code>/setmatch user_id 아호 성명</code>');
+  if (!q) { tgSend_(chat.id, '사용법: <b>/whois 검색어</b> (텔레그램이름·아호·성명 일부)\n예) /whois 권'); return; }
+  var data = membersData_();
+  var today = todayStr_();
+  var evs = recurringEvents_();
+  var stKr = { 'attend': '참석', 'absent': '불참' };
+  var lines = [];
+  for (var i = 1; i < data.length; i++) {
+    var uid = String(data[i][0]);
+    var uname = data[i][1] || '', fname = data[i][2] || '';
+    var active = (data[i][3] == 1);
+    var aho = String(data[i][5] || '').trim(), name = String(data[i][6] || '').trim();
+    if ([fname, uname, aho, name].join(' ').indexOf(q) === -1) continue;
+    var att = evs.map(function (ev) {
+      var meeting = nextMeetingDate_(today, ev.weekday, ev.nth);
+      var s = getUserAttendStatus_(ev.key, meeting, uid);
+      return ev.name + '=' + (stKr[s] || '무응답');
+    }).join(' / ');
+    lines.push('• id <code>' + uid + '</code>\n  텔레그램: ' + escapeHtml_(fname || uname || '(없음)') +
+      '\n  매칭: ' + (name ? escapeHtml_((aho ? aho + ' ' : '') + name) : '❌(미매칭)') +
+      '\n  활성: ' + (active ? '예' : '❌아니오') +
+      '\n  출석: ' + att);
+  }
+  if (!lines.length) { tgSend_(chat.id, '"' + escapeHtml_(q) + '" 검색 결과 없음'); return; }
+  tgSend_(chat.id, '🔎 <b>회원 조회</b> "' + escapeHtml_(q) + '"\n' + lines.join('\n\n') +
+    '\n\n✏️ 매칭수정: <code>/setmatch id 아호 성명</code>');
 }
 
 /** (관리자) 매칭 수정: /setmatch <user_id> <아호> <성명> → 시트의 matched_aho/name 고정(confirmed=Y) */
