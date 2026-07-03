@@ -158,22 +158,30 @@ function subTitle_(name) { return SUB_TITLES[name] || pastPresidentTitle_(name) 
 
 // ── 참석 명단 임원 정렬 순위 + 직책 뱃지(장식) ─────────────────
 // 참석 명단은 늦게 눌러도 항상 이 순서로 상단 고정:
-// 현 회장(1) → 차기회장 → 부회장 → 총무이사 → 재무이사 → 사찰이사 → 그 외 임원 → 일반회원(누른 순서).
+// 회장→차기회장→부회장→총무→재무→사찰→공공이미지→멤버십→클럽관리→재단관리→봉사프로젝트→IT→DEI→그외임원→일반(누른순서).
 var ATTEND_ROLE_RANK = {
   '클럽 회장': 1, '차기회장': 2, '부회장': 3,
-  '총무이사': 4, '재무이사': 5, '사찰이사': 6
+  '총무이사': 4, '재무이사': 5, '사찰이사': 6,
+  '공공이미지위원장': 7, '멤버십위원장': 8, '클럽관리위원장': 9,
+  '재단관리위원장': 10, '봉사프로젝트위원장': 11, 'IT위원장': 12, 'DEI위원장': 13,
+  '출석위원장': 14   // 임원 중 제일 아래(일반 회원 바로 위)
 };
+// 직책 라벨에서 괄호 보조명칭 제거(예: '공공이미지위원장(클럽감사)' → '공공이미지위원장')
+function roleKey_(role) { return String(role || '').replace(/\s*\(.*\)\s*/, '').trim(); }
 function attendRank_(name) {
   var role = clubRole_(name);
-  if (!role) return 99;                          // 일반 회원(직책 없음)
-  return ATTEND_ROLE_RANK[role] || 50;           // 지정 6직책=1~6, 그 외 임원=50(일반보다 위)
+  if (!role) return 99;                                            // 일반 회원(직책 없음)
+  return ATTEND_ROLE_RANK[role] || ATTEND_ROLE_RANK[roleKey_(role)] || 50;  // 지정 13직책=1~13, 그 외 임원=50
 }
 // 직책별 장식 이모지
 var ROLE_BADGE = {
   '클럽 회장': '👑', '차기회장': '🌟', '부회장': '🎖️',
-  '총무이사': '📋', '재무이사': '💰', '사찰이사': '⚖️'
+  '총무이사': '📋', '재무이사': '💰', '사찰이사': '⚖️',
+  '공공이미지위원장': '📢', '멤버십위원장': '🤝', '클럽관리위원장': '🏛️',
+  '재단관리위원장': '💝', '봉사프로젝트위원장': '🛠️', 'IT위원장': '💻',
+  'DEI위원장': '🌈', '출석위원장': '📅'
 };
-function roleBadge_(role) { return ROLE_BADGE[role] || '🎗️'; }
+function roleBadge_(role) { return ROLE_BADGE[role] || ROLE_BADGE[roleKey_(role)] || '🎗️'; }
 // 참석 명단 표기: 임원이면 '아호 이름 — 👑 클럽 회장', 일반은 '아호 이름'
 function attendLabel_(aho, name) {
   var base = (aho ? aho + ' ' : '') + name;
