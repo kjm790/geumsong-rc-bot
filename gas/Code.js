@@ -420,15 +420,37 @@ function cmdAudit_(chat, from) {
     '\n\n각 줄의 <code>/setmatch …</code>를 눌러(복사) 실행하면 교정됩니다.');
 }
 
-/** (관리자) 밀린 웹훅 업데이트 큐 즉시 비우기 — 무응답/지연 시 자가복구 */
+/** (관리자) 밀린 웹훅 업데이트 큐 즉시 비우기 + 자동복구 트리거 설치 */
 function cmdFlush_(chat, from) {
   if (!requireAdmin_(chat, from)) return;
   var url = getProp_('WEBHOOK_URL', false);
   if (!url) { tgSend_(chat.id, '❌ WEBHOOK_URL 미설정 — 비울 수 없습니다.'); return; }
   var res = tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
+  var healOn = ensureHealTrigger_();
   tgSend_(chat.id, (res && res.ok)
-    ? '✅ 밀린 업데이트 큐를 비웠습니다. 봇 응답이 다시 원활해집니다.\n(테스트로 버튼을 많이 눌러 밀렸을 때 이 명령으로 바로 복구하세요.)'
+    ? '✅ 밀린 업데이트 큐를 비웠습니다.\n🔄 자동복구 ' + (healOn ? '켜짐(1분마다 점검·복구)' : '이미 켜져 있음') + ' — 앞으로 밀려도 스스로 복구합니다.'
     : '❌ 실패: ' + (res && (res.description || res.raw)));
+}
+
+/** 자동복구 트리거(1분마다 healWebhook_) 설치(없으면). 새로 만들었으면 true */
+function ensureHealTrigger_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'healWebhook_'; });
+  if (has) return false;
+  ScriptApp.newTrigger('healWebhook_').timeBased().everyMinutes(1).create();
+  return true;
+}
+
+/** 자동복구: 밀린 큐가 임계(6)를 넘으면 비운다. 1분 트리거에서 호출.
+ *  (302 재시도로 적체돼 새 명령/응답이 막히는 상태를 스스로 해소) */
+function healWebhook_() {
+  try {
+    var info = tgApi_('getWebhookInfo', {});
+    var pending = (info && info.result) ? (info.result.pending_update_count || 0) : 0;
+    if (pending > 6) {
+      var url = getProp_('WEBHOOK_URL', false);
+      if (url) tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
+    }
+  } catch (e) { Logger.log('healWebhook_ 오류: ' + e); }
 }
 
 /** (관리자) 진단: 설정값 + 임원방 실제 전송 테스트 결과를 보고 */
