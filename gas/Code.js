@@ -115,6 +115,8 @@ function handleMessage_(msg) {
       case '/unmatched': cmdUnmatched_(chat, from); break;
       case '/whois': cmdWhois_(chat, from, text); break;
       case '/setmatch': cmdSetMatch_(chat, from, text); break;
+      case '/audit': cmdAudit_(chat, from); break;
+      case '/flush': cmdFlush_(chat, from); break;
       case '/diag': cmdDiag_(chat, from); break;
       default: break;
     }
@@ -310,7 +312,11 @@ function cmdHelp_(chat, from) {
     '• /board — 임원방에 불참·미응답 실시간 현황 띄우기\n' +
     '• /밴드 — (다음 줄에 글·링크 붙여넣어) 3700지구 밴드 소식을 단톡에 게시\n' +
     '       └ 사진: 사진 캡션 칸에 /밴드+내용 (여러 장 앨범도 가능)\n' +
-    '• /unmatched — 명부 미매칭 회원 확인\n';
+    '• /unmatched — 명부 미매칭 회원 확인\n' +
+    '• /audit — 전체 오매칭·미매칭 일괄 점검\n' +
+    '• /whois 이름 — 회원 조회(id·매칭·출석)\n' +
+    '• /setmatch id 아호 성명 — 매칭 교정\n' +
+    '• /flush — 밀린 큐 비우기(무응답 복구)\n';
   var recurring = recurringEvents_().map(function (e) { return '• ' + e.name + ': <b>' + eventDescribe_(e) + '</b>'; }).join('\n');
   var notices = noticeEvents_().map(function (e) { return '• ' + e.name + ': ' + eventDescribe_(e); }).join('\n');
   var schedule = '\n📅 정기 일정(출석 집계)\n' + recurring +
@@ -384,6 +390,45 @@ function handleCallback_(cq) {
   if (data === 'view:noresp') { handleView_(cq, 'no_response'); return; }
   if (data.indexOf('att:') === 0) { handleAttendance_(cq); return; }
   tgAnswerCallback_(cq.id, '');
+}
+
+/** (관리자) 전체 매칭 점검: 텔레그램 이름과 배정된 매칭이 어긋난 회원(오매칭 의심)·미매칭을 한 번에 목록.
+ *  수동확정(confirmed=Y)은 신뢰하고 제외. 각 건에 바로 쓸 /setmatch 명령을 함께 제시. */
+function cmdAudit_(chat, from) {
+  if (!requireAdmin_(chat, from)) return;
+  var members = getActiveMembers_();
+  var flags = [];
+  members.forEach(function (m) {
+    if (m.confirmed === 'Y') return;                       // 수동 확정은 신뢰
+    var tname = m.full_name || m.username || '';
+    var sug = matchRoster_(tname);
+    var sugName = sug ? sug.entry.name : null;
+    if (m.name && sugName && sugName !== m.name) {
+      flags.push({ m: m, kind: '⚠️ 매칭 다름', s: sug.entry });   // 배정 ≠ 이름 기반 추천 → 오매칭 의심
+    } else if (!m.name) {
+      flags.push({ m: m, kind: '❌ 미매칭', s: sug ? sug.entry : null });
+    }
+  });
+  if (!flags.length) { tgSend_(chat.id, '✅ <b>매칭 점검 결과</b>\n오매칭·미매칭 의심 없음 (수동확정 제외). 깨끗합니다!'); return; }
+  var lines = flags.map(function (f) {
+    var sug = f.s ? (f.s.aho + ' ' + f.s.name) : '(추천 없음)';
+    var fix = f.s ? '\n  ✏️ <code>/setmatch ' + f.m.user_id + ' ' + f.s.aho + ' ' + f.s.name + '</code>' : '';
+    return f.kind + '\n  id <code>' + f.m.user_id + '</code> · 텔레그램: ' + escapeHtml_(f.m.full_name || f.m.username || '') +
+      '\n  현재: ' + (f.m.name ? escapeHtml_((f.m.aho ? f.m.aho + ' ' : '') + f.m.name) : '(없음)') + ' → 추천: ' + escapeHtml_(sug) + fix;
+  });
+  tgSend_(chat.id, '🔍 <b>매칭 점검</b> — 확인 필요 ' + flags.length + '건 (수동확정 제외)\n\n' + lines.join('\n\n') +
+    '\n\n각 줄의 <code>/setmatch …</code>를 눌러(복사) 실행하면 교정됩니다.');
+}
+
+/** (관리자) 밀린 웹훅 업데이트 큐 즉시 비우기 — 무응답/지연 시 자가복구 */
+function cmdFlush_(chat, from) {
+  if (!requireAdmin_(chat, from)) return;
+  var url = getProp_('WEBHOOK_URL', false);
+  if (!url) { tgSend_(chat.id, '❌ WEBHOOK_URL 미설정 — 비울 수 없습니다.'); return; }
+  var res = tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
+  tgSend_(chat.id, (res && res.ok)
+    ? '✅ 밀린 업데이트 큐를 비웠습니다. 봇 응답이 다시 원활해집니다.\n(테스트로 버튼을 많이 눌러 밀렸을 때 이 명령으로 바로 복구하세요.)'
+    : '❌ 실패: ' + (res && (res.description || res.raw)));
 }
 
 /** (관리자) 진단: 설정값 + 임원방 실제 전송 테스트 결과를 보고 */
