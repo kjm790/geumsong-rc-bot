@@ -130,11 +130,11 @@ function pastPresidentTitle_(name) { return PAST_PRESIDENTS[name] || null; }
 
 // 현 직책(성명 → 직책). 명칭 앞에 붙는다. 회기마다 갱신. (예: 출석위원장 동우 김종만)
 var CLUB_ROLES = {
-  '박동용': '회장',
+  '박동용': '클럽 회장',
   '서상일': '차기회장',
   '황준영': '부회장',
-  '이준원': '총무',
-  '김태훈': '사찰',
+  '이준원': '총무이사',
+  '김태훈': '사찰이사',
   '김종만': '출석위원장',
   '김영상': '재무이사',
   '이영희': 'IT위원장',
@@ -155,6 +155,31 @@ var SUB_TITLES = {
 };
 // 괄호에 넣을 보조 명칭: 동호회장 우선, 없으면 역대회장.
 function subTitle_(name) { return SUB_TITLES[name] || pastPresidentTitle_(name) || null; }
+
+// ── 참석 명단 임원 정렬 순위 + 직책 뱃지(장식) ─────────────────
+// 참석 명단은 늦게 눌러도 항상 이 순서로 상단 고정:
+// 현 회장(1) → 차기회장 → 부회장 → 총무이사 → 재무이사 → 사찰이사 → 그 외 임원 → 일반회원(누른 순서).
+var ATTEND_ROLE_RANK = {
+  '클럽 회장': 1, '차기회장': 2, '부회장': 3,
+  '총무이사': 4, '재무이사': 5, '사찰이사': 6
+};
+function attendRank_(name) {
+  var role = clubRole_(name);
+  if (!role) return 99;                          // 일반 회원(직책 없음)
+  return ATTEND_ROLE_RANK[role] || 50;           // 지정 6직책=1~6, 그 외 임원=50(일반보다 위)
+}
+// 직책별 장식 이모지
+var ROLE_BADGE = {
+  '클럽 회장': '👑', '차기회장': '🌟', '부회장': '🎖️',
+  '총무이사': '📋', '재무이사': '💰', '사찰이사': '⚖️'
+};
+function roleBadge_(role) { return ROLE_BADGE[role] || '🎗️'; }
+// 참석 명단 표기: 임원이면 '아호 이름 — 👑 클럽 회장', 일반은 '아호 이름'
+function attendLabel_(aho, name) {
+  var base = (aho ? aho + ' ' : '') + name;
+  var role = clubRole_(name);
+  return role ? base + ' — ' + roleBadge_(role) + ' ' + role : base;
+}
 
 function getAdminIds_() {
   var raw = getProp_('ADMIN_IDS', false) || '';
