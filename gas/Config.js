@@ -189,6 +189,22 @@ function attendLabel_(aho, name) {
   return role ? base + ' — ' + roleBadge_(role) + ' ' + role : base;
 }
 
+// ── 회비: 직책별 분담금(만원). 0=분담금 없음 ─────────────────
+var DIRECTOR_SHARE_ROLES = {
+  '총무이사': 1, '재무이사': 1, '사찰이사': 1,          // 이사 3
+  '공공이미지위원장': 1, '로타리재단위원장': 1, '봉사프로젝트위원장': 1,
+  'IT위원장': 1, 'DEI위원장': 1, '클럽관리위원장': 1, '멤버십위원장': 1  // 상임위원장 이사진 7
+  // ※ 출석위원장은 상임 이사진 아님 → 분담금 없음
+};
+function shareByRole_(role) {
+  if (!role) return 0;
+  var r = roleKey_(role);
+  if (r === '클럽 회장') return 300;
+  if (r === '차기회장') return 200;
+  if (r === '부회장') return 100;
+  return DIRECTOR_SHARE_ROLES[r] ? 50 : 0;
+}
+
 function getAdminIds_() {
   var raw = getProp_('ADMIN_IDS', false) || '';
   return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);

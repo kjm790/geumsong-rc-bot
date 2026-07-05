@@ -118,6 +118,7 @@ function handleMessage_(msg) {
       case '/remind':    cmdRemind_(chat, from); break;
       case '/members':   cmdMembers_(chat, from); break;
       case '/board':     cmdBoard_(chat, from); break;
+      case '/회비': case '/fee': case '/dues': cmdDues_(chat, from); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
       case '/whois': cmdWhois_(chat, from, text); break;
@@ -170,6 +171,32 @@ function cmdStart_(chat, from, fullName) {
 
 function escapeHtml_(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** 회비 안내 — 회기·공통회비·분담금·신입·PHF. 누른 사람이 임원이면 본인 분담금까지 표시. */
+function cmdDues_(chat, from) {
+  var L = ['💰 <b>대구금송RC 회비 안내</b>', UI_LINE, '🗓 회기: 7/1 ~ 익년 6/30'];
+  var member = getMemberById_(from.id);
+  if (member && member.name) {
+    var role = clubRole_(member.name);
+    var share = shareByRole_(role);
+    var who = escapeHtml_(member.aho || member.name);
+    L.push('', share > 0
+      ? '👤 <b>' + who + '</b> 님(' + escapeHtml_(role) + ') → 공통 회비 <b>+ 분담금 ' + share + '만원</b>'
+      : '👤 <b>' + who + '</b> 님 → 공통 회비');
+  }
+  L.push('', '▌<b>공통 회비</b> (전 회원 동일)',
+    ' • 연회비 70만원', ' • 의무봉사금 30만원', ' • 주회비 12만원', ' • RFSM $100 (154,000원)');
+  L.push('', '▌<b>회장단·이사진 분담금</b> (공통 회비에 추가)',
+    ' • 회장 300만원', ' • 차기회장 200만원', ' • 부회장 100만원',
+    ' • 이사진 각 50만원', '   └ 총무·재무·사찰이사 + 상임위원장 7',
+    '     (공공이미지·로타리재단·봉사프로젝트·IT·DEI·클럽관리·멤버십)');
+  L.push('', '▌<b>신입회원</b>', ' • 공통 회비 + 봉사의연금 30만원',
+    '   └ 가입비 대신, 한국장학재단 기부(영수증 발행)');
+  L.push('', '▌<b>로타리재단 기부</b> (참고)',
+    ' • PHF $1,000 (7월 기준 1,540,000원)', ' • RFSM $100 (7월 기준 154,000원)',
+    ' • ※ PHF 기부회원은 RFSM 제외');
+  tgSend_(chat.id, L.join('\n'));
 }
 
 // ── 밴드 소식 게시 공통 헬퍼 ────────────────────────────────
@@ -309,7 +336,7 @@ function cmdUnmatched_(chat, from) {
 function cmdHelp_(chat, from) {
   var common =
     '🤖 <b>AI사무장봇 도움말</b>\n대구금송로타리클럽 정기모임·봉사 출석을 도와드립니다.\n\n' +
-    '• /start — 회원 등록\n• /check — 출석 버튼 다시 띄우기\n• /id — 이 대화방의 chat ID 확인\n• /help — 도움말\n';
+    '• /start — 회원 등록\n• /check — 출석 버튼 다시 띄우기\n• /회비 — 회비 안내\n• /id — 이 대화방의 chat ID 확인\n• /help — 도움말\n';
   var admin =
     '\n<b>관리자 전용</b>\n' +
     '• /status — 다가오는 행사별 출석 현황\n' +
