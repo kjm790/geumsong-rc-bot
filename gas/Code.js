@@ -127,6 +127,8 @@ function handleMessage_(msg) {
       case '/지출': cmdExpense_(chat, from, text); break;
       case '/장부': cmdLedger_(chat, from); break;
       case '/월보고': case '/monthreport': cmdMonthReport_(chat, from, text); break;
+      case '/예산': cmdBudget_(chat, from, text); break;
+      case '/결산': cmdSettlement_(chat, from); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
       case '/whois': cmdWhois_(chat, from, text); break;
