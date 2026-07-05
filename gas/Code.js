@@ -123,6 +123,9 @@ function handleMessage_(msg) {
       case '/납부': cmdPay_(chat, from, text); break;
       case '/환율': cmdRate_(chat, from, text); break;
       case '/회비설정': cmdDuesSetup_(chat, from); break;
+      case '/수입': cmdIncome_(chat, from, text); break;
+      case '/지출': cmdExpense_(chat, from, text); break;
+      case '/장부': cmdLedger_(chat, from); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
       case '/whois': cmdWhois_(chat, from, text); break;

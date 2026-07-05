@@ -157,7 +157,8 @@ function cmdPay_(chat, from, text) {
   var won = Math.round(amt * 10000);
   var r = duesAddPayment_(parts[1], won);
   if (!r) { tgSend_(chat.id, '"' + escapeHtml_(parts[1]) + '" 회원을 대장에서 못 찾았습니다.'); return; }
-  tgSend_(chat.id, '✅ 납부 기록\n' + escapeHtml_(r.label) + '  +' + duesFmt_(won) + '원\n납부누계 ' + duesFmt_(r.paid) + ' / 부과 ' + duesFmt_(r.total) + ' → 미납 <b>' + duesFmt_(r.due) + '원</b>');
+  ledgerAppend_('수입', '회비', r.label, won);   // 거래장부에 수입 자동 기록(월 재무보고 연동)
+  tgSend_(chat.id, '✅ 납부 기록\n' + escapeHtml_(r.label) + '  +' + duesFmt_(won) + '원\n납부누계 ' + duesFmt_(r.paid) + ' / 부과 ' + duesFmt_(r.total) + ' → 미납 <b>' + duesFmt_(r.due) + '원</b>\n<i>(거래장부에 수입 기록됨)</i>');
 }
 
 /** (재무·관리자) 환율 조회/설정: /환율 [숫자] */
