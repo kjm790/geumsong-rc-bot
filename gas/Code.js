@@ -126,6 +126,7 @@ function handleMessage_(msg) {
       case '/수입': cmdIncome_(chat, from, text); break;
       case '/지출': cmdExpense_(chat, from, text); break;
       case '/장부': cmdLedger_(chat, from); break;
+      case '/월보고': case '/monthreport': cmdMonthReport_(chat, from, text); break;
       case '/밴드': case '/band': case '/밴드소식': cmdBandPost_(chat, from, text); break;
       case '/unmatched': cmdUnmatched_(chat, from); break;
       case '/whois': cmdWhois_(chat, from, text); break;
@@ -1058,6 +1059,9 @@ function dailyCheck() {
   }
   // 정기모임 미응답자 개인 독려 (말일~당일 오전)
   if (SETTINGS.personalNudge) personalNudgeIfWindow_();
+
+  // 매월 1일 → 전월 재무보고 임원방 자동 게시(1회)
+  postMonthlyReportIfDue_();
 }
 
 // ───────────────────────────────────── 설치/운영 함수 (에디터에서 1회 실행)
