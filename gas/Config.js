@@ -25,6 +25,7 @@ var EVENTS = [
   // 골프회 — 홀수월, 달마다 내용이 다름
   {
     key: 'event3', name: '골프회', kind: 'monthly_notice',
+    officers: '회장 찰수 서상일 · 부회장 범정 김현태 · 총무 다원 이경환', // 2026-27 회기
     activities: { '7': '스크린 골프', '9': '정기 라운딩', '11': '정기 라운딩', '1': '스크린 골프', '3': '정기 라운딩', '5': '골프회장배' }
   },
   // 문화레저동호회 — 8·10·12·2·4월, 전 회원 대상(형태는 회차별)
@@ -49,7 +50,10 @@ function clubNoticeForMonth_(month) {
   var lines = [];
   noticeEvents_().forEach(function (ev) {
     var act = clubEventActivityForMonth_(ev, month);
-    if (act) lines.push('• ' + ev.name + ': ' + act);
+    if (act) {
+      lines.push('• ' + ev.name + ': ' + act);
+      if (ev.officers) lines.push('   └ ' + ev.officers);
+    }
   });
   return lines;
 }
@@ -60,7 +64,10 @@ function clubNoticeForMonths_(months) {
   months.forEach(function (month) {
     noticeEvents_().forEach(function (ev) {
       var act = clubEventActivityForMonth_(ev, month);
-      if (act) lines.push('• (' + month + '월) ' + ev.name + ': ' + act);
+      if (act) {
+        lines.push('• (' + month + '월) ' + ev.name + ': ' + act);
+        if (ev.officers) lines.push('   └ ' + ev.officers);
+      }
     });
   });
   return lines;
@@ -151,6 +158,8 @@ function clubRole_(name) { return CLUB_ROLES[name] || null; }
 // 괄호 안 보조 명칭(성명 → 동호회장 등). 역대회장과 함께 subTitle_ 로 묶임.
 var SUB_TITLES = {
   '서상일': '골프회장',
+  '김현태': '골프 부회장',
+  '이경환': '골프 총무',
   '황준영': '문화레저동호회 회장'
 };
 // 괄호에 넣을 보조 명칭: 동호회장 우선, 없으면 역대회장.

@@ -29,6 +29,7 @@ function doGet(e) {
     try { out.push('triggers=' + ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }).join(',')); }
     catch (er) { out.push('triggers_ERR=' + er); }
     out.push('WEBHOOK_URL_set=' + !!getProp_('WEBHOOK_URL', false));
+    out.push('paused=' + isPaused_());
     return ContentService.createTextOutput(out.join('\n'));
   }
   return ContentService.createTextOutput('AI사무장봇 작동 중');
@@ -135,6 +136,8 @@ function handleMessage_(msg) {
       case '/setmatch': cmdSetMatch_(chat, from, text); break;
       case '/audit': cmdAudit_(chat, from); break;
       case '/flush': cmdFlush_(chat, from); break;
+      case '/pause': case '/일시정지': cmdPause_(chat, from); break;
+      case '/resume': case '/재개': cmdResume_(chat, from); break;
       case '/diag': cmdDiag_(chat, from); break;
       default: break;
     }
@@ -153,6 +156,7 @@ function requireAdmin_(chat, from) {
 
 /** 누구나 단톡에서 출석 버튼(실시간 보드)을 최하단에 다시 띄움 — 새로 들어온 회원용 */
 function cmdShowBoard_(chat, from) {
+  if (pausedGuard_(chat)) return;
   floatBoard_();
   if (String(chat.id) !== String(getGroupChatId_())) tgSend_(chat.id, '단톡에 출석 버튼을 띄웠습니다.');
 }
@@ -360,7 +364,8 @@ function cmdHelp_(chat, from) {
     '• /audit — 전체 오매칭·미매칭 일괄 점검\n' +
     '• /whois 이름 — 회원 조회(id·매칭·출석)\n' +
     '• /setmatch id 아호 성명 — 매칭 교정\n' +
-    '• /flush — 밀린 큐 비우기(무응답 복구)\n';
+    '• /flush — 밀린 큐 비우기(무응답 복구)\n' +
+    '• /pause · /resume — 정기모임 공지 업무 일시정지 / 재개(단톡 인사 자동 게시)\n';
   var recurring = recurringEvents_().map(function (e) { return '• ' + e.name + ': <b>' + eventDescribe_(e) + '</b>'; }).join('\n');
   var notices = noticeEvents_().map(function (e) { return '• ' + e.name + ': ' + eventDescribe_(e); }).join('\n');
   var schedule = '\n📅 정기 일정(출석 집계)\n' + recurring +
@@ -388,6 +393,7 @@ function cmdStatus_(chat, from) {
 
 function cmdAnnounce_(chat, from) {
   if (!requireAdmin_(chat, from)) return;
+  if (pausedGuard_(chat)) return;
   var sent = recurringEvents_().map(function (ev) {
     var meeting = sendAnnouncement_(ev);
     return ev.name + ' (' + formatMeetingDate_(meeting, ev.hour, ev.minute) + ')';
@@ -400,6 +406,7 @@ function cmdAnnounce_(chat, from) {
 
 function cmdRemind_(chat, from) {
   if (!requireAdmin_(chat, from)) return;
+  if (pausedGuard_(chat)) return;
   var results = recurringEvents_().map(function (ev) {
     var n = sendReminder_(ev);
     return ev.name + ': ' + (n === 0 ? '미응답 없음' : n + '명에게 발송');
@@ -432,7 +439,10 @@ function handleCallback_(cq) {
   if (data === 'view:attend') { handleView_(cq, 'attend'); return; }
   if (data === 'view:absent') { handleView_(cq, 'absent'); return; }
   if (data === 'view:noresp') { handleView_(cq, 'no_response'); return; }
-  if (data.indexOf('att:') === 0) { handleAttendance_(cq); return; }
+  if (data.indexOf('att:') === 0) {
+    if (isPaused_()) { tgAnswerCallback_(cq.id, '⏸ AI사무장봇 정기모임 공지 업무가 일시정지 중입니다.', true); return; }
+    handleAttendance_(cq); return;
+  }
   tgAnswerCallback_(cq.id, '');
 }
 
@@ -502,6 +512,76 @@ function healWebhook_() {
       if (url) tgApi_('setWebhook', { url: url, drop_pending_updates: true, allowed_updates: ['message', 'callback_query'] });
     }
   } catch (e) { Logger.log('healWebhook_ 오류: ' + e); }
+}
+
+// ───────────────────────────────────── 일시정지 / 재개 (v74)
+/** Script Property BOT_PAUSED='Y' 이면 정기모임 공지 업무(출석조사·리마인더·다이제스트·개인독려·출석버튼)를 멈춘다.
+ *  회비·장부·월보고 등 재무 기능과 관리자 조회 명령은 그대로 동작. */
+function isPaused_() { return getProp_('BOT_PAUSED', false) === 'Y'; }
+function setPaused_(on) {
+  if (on) props_().setProperty('BOT_PAUSED', 'Y');
+  else props_().deleteProperty('BOT_PAUSED');
+}
+/** 일시정지 중이면 안내하고 true 반환(호출부는 즉시 return) */
+function pausedGuard_(chat) {
+  if (!isPaused_()) return false;
+  tgSend_(chat.id, '⏸ AI사무장봇 정기모임 공지 업무가 <b>일시정지</b> 중입니다.\n관리자: /resume 으로 재개할 수 있습니다.');
+  return true;
+}
+
+function pauseNoticeText_() {
+  return '⚙️ <b>' + UI_CLUB + '</b>\n' + UI_LINE + '\n' +
+    '⏸ <b>AI사무장봇 일시정지 안내</b>\n\n' +
+    '회원 여러분, 안녕하십니까. AI사무장봇입니다.\n' +
+    '그동안 정기모임·봉사 출석조사에 응답해 주시고 따뜻하게 맞아 주셔서 진심으로 감사드립니다. 🙏\n\n' +
+    '클럽 운영 사정으로 <b>정기모임 공지·출석조사 업무를 당분간 일시정지</b>합니다.\n' +
+    '• 자동 출석조사 · 리마인더 · 주간 안내 · 개인 독려가 잠시 멈춥니다.\n' +
+    '• 정기모임·봉사 일정은 별도로 안내드리겠습니다.\n' +
+    '• 업무를 재개하면 다시 인사드리겠습니다.\n\n' +
+    '늘 건강하시고, 다시 뵙는 날까지 평안하시길 바랍니다. 😊\n' +
+    UI_LINE + '\n' + UI_SLOGAN;
+}
+
+function resumeNoticeText_() {
+  return '⚙️ <b>' + UI_CLUB + '</b>\n' + UI_LINE + '\n' +
+    '▶️ <b>AI사무장봇 업무 재개 안내</b>\n\n' +
+    '회원 여러분, 안녕하십니까. AI사무장봇이 돌아왔습니다. 😊\n' +
+    '오늘부터 정기모임 공지·출석조사 업무를 다시 시작합니다.\n' +
+    '• 출석 버튼(✅ 참석 / ❌ 불참)이 다시 동작합니다.\n' +
+    '• 필요하시면 /check 로 출석 버튼을 불러올 수 있습니다.\n\n' +
+    '변함없는 관심과 참여 부탁드립니다. 🙏\n' +
+    UI_LINE + '\n' + UI_SLOGAN;
+}
+
+/** (관리자) 일시정지: 속성 설정 + 단톡 인사 + 임원방 알림 */
+function cmdPause_(chat, from) {
+  if (!requireAdmin_(chat, from)) return;
+  if (isPaused_()) { tgSend_(chat.id, '이미 일시정지 상태입니다. (/resume 으로 재개)'); return; }
+  setPaused_(true);
+  var grp = getGroupChatId_();
+  var r1 = tgSend_(grp, pauseNoticeText_());
+  var off = getOfficerChatId_();
+  if (off) tgSend_(off, '⏸ <b>AI사무장봇 정기모임 공지 업무 일시정지</b>\n' +
+    '관리자 요청으로 자동 출석조사·리마인더·다이제스트·개인독려와 출석버튼을 멈췄습니다.\n' +
+    '회비·장부·월보고 등 재무 기능은 계속 사용 가능합니다. 재개는 /resume.');
+  if (String(chat.id) !== String(grp)) {
+    tgSend_(chat.id, (r1 && r1.ok ? '✅ 일시정지했습니다. 단톡에 인사를 게시했습니다.' : '⚠️ 일시정지는 됐으나 단톡 인사 게시 실패: ' + (r1 && (r1.description || r1.raw))) +
+      '\n재개: /resume');
+  }
+}
+
+/** (관리자) 재개: 속성 해제 + 단톡 인사 */
+function cmdResume_(chat, from) {
+  if (!requireAdmin_(chat, from)) return;
+  if (!isPaused_()) { tgSend_(chat.id, '현재 일시정지 상태가 아닙니다.'); return; }
+  setPaused_(false);
+  var grp = getGroupChatId_();
+  var r1 = tgSend_(grp, resumeNoticeText_());
+  var off = getOfficerChatId_();
+  if (off) tgSend_(off, '▶️ <b>AI사무장봇 업무 재개</b> — 자동 출석조사·리마인더·출석버튼이 다시 동작합니다.');
+  if (String(chat.id) !== String(grp)) {
+    tgSend_(chat.id, (r1 && r1.ok ? '✅ 재개했습니다. 단톡에 인사를 게시했습니다.' : '⚠️ 재개는 됐으나 단톡 인사 게시 실패: ' + (r1 && (r1.description || r1.raw))));
+  }
 }
 
 /** (관리자) 진단: 설정값 + 임원방 실제 전송 테스트 결과를 보고 */
@@ -1039,6 +1119,11 @@ function sendPersonalNudges_(ev, meeting) {
 
 // ───────────────────────────────────── 시간 트리거(매일 점검)
 function dailyCheck() {
+  if (isPaused_()) {
+    Logger.log('⏸ 일시정지 중 — 출석조사/리마인더/다이제스트/개인독려 생략');
+    postMonthlyReportIfDue_();   // 임원방 월 재무보고는 정기모임 공지 업무와 무관하므로 유지
+    return;
+  }
   var today = todayStr_();
   var monthEnd = isLastDayOfMonth_(today);
   recurringEvents_().forEach(function (ev) {
