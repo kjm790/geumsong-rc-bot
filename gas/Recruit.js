@@ -61,6 +61,8 @@ function recruitParse_(values) {
 /** 명단 정렬 순위: 임원 서열(회장→차기회장→부회장→총무→재무→사찰→위원장…, Config.js ATTEND_ROLE_RANK) 먼저, 나머지는 시트 번호순 */
 function recruitRoleRank_(role) {
   if (!role) return 99;
+  var own = (typeof CLUB !== 'undefined' && CLUB.roleRank) || {};          // 클럽별 서열(Club.js)이 있으면 우선
+  if (own[role] || own[roleKey_(role)]) return own[role] || own[roleKey_(role)];
   return ATTEND_ROLE_RANK[role] || ATTEND_ROLE_RANK[roleKey_(role)] || 50;
 }
 
@@ -494,7 +496,13 @@ function recruitSetRoleReply_(chat, user, text) {
     var ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0], values = sh.getDataRange().getValues();
     var probe = recruitRolePlan_(values, args[0], args.slice(1).join(' ')), allowed = null;
     if (probe.col) {                                        // 그 칸의 드롭다운 목록을 읽어 목록 밖 값이 들어가지 않게 한다
-      try { var dv = sh.getRange(probe.row, probe.col).getDataValidation(); if (dv && dv.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) allowed = dv.getCriteriaValues()[0]; } catch (e) {}
+      try {
+        var dv = sh.getRange(probe.row, probe.col).getDataValidation(), T = SpreadsheetApp.DataValidationCriteria;
+        if (dv && dv.getCriteriaType() === T.VALUE_IN_LIST) allowed = dv.getCriteriaValues()[0];
+        else if (dv && dv.getCriteriaType() === T.VALUE_IN_RANGE) {                 // 다른 탭의 칸을 참조하는 드롭다운(예: 「창립회기 임원」 탭의 직책 칸)
+          allowed = [].concat.apply([], dv.getCriteriaValues()[0].getValues()).map(function (v) { return String(v).trim(); }).filter(String);
+        }
+      } catch (e) {}
     }
     var plan = allowed ? recruitRolePlan_(values, args[0], args.slice(1).join(' '), allowed) : probe;
     if (plan.error === 'notfound') {

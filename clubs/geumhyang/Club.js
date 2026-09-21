@@ -28,6 +28,9 @@ var CLUB = {
   dues: { annual: 0, service: 0, weekly: 0, newSeed: 0, rfsmUsd: 100, fiscalStart: 7 },
   duesInfo: ['', '회비는 창립총회에서 확정 후 안내드리겠습니다.'],
 
+  // 상임위원회 7개(세칙): 클럽관리·회원·공공이미지·로타리재단·봉사프로젝트 + 6번 DEI + 7번 IT. 명단 정렬 서열(코어 기본값은 IT가 DEI 앞)
+  roleRank: { 'DEI위원장': 12, 'IT위원장': 13 },
+
   // 창립회원 모집(Recruit.js): 예비회원 명단 시트의 탭 이름·목표 인원. 창립행사일(D-day 기준)은 설정 탭 「창립일」 또는 Script Property CHARTER_DATE
   recruit: { tab: '예비회원명단', target: 20, charterDate: '' },
 

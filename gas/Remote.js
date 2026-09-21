@@ -155,6 +155,43 @@ function remoteSetManagers(names) {
   return { tab: sh.getName(), before: before, after: names, rows: sh.getRange(hr + 2, 1, names.length, 5).getValues() };
 }
 
+/**
+ * 직책 명칭 바꾸기(예: '분과6 위원장(명칭 미정)' → 'DEI위원장'): 명단 파일의 모든 탭에서 그 글자와 '완전히 같은' 칸을 바꾸고,
+ * 명단 「창립회기 직책」 열의 드롭다운이 직접 입력한 목록이면 목록 값도 바꾼다(범위를 참조하는 드롭다운이면 칸만 바꾸면 따라온다).
+ * 봇 데이터시트의 「임원」 탭도 함께 바꾼다.
+ */
+function remoteRenameRole(oldTitle, newTitle) {
+  var out = { cells: {}, validation: '' }, roster = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true));
+  [roster, getSS_()].forEach(function (ss) {
+    ss.getSheets().forEach(function (sh) {
+      var n = sh.createTextFinder(oldTitle).matchEntireCell(true).replaceAllWith(newTitle);
+      if (n) out.cells[ss.getName() + ' / ' + sh.getName()] = n;
+    });
+  });
+  var sh = roster.getSheetByName(recruitConf_().tab) || roster.getSheets()[0], values = sh.getDataRange().getValues(), lay = recruitAhoLayout_(values);
+  var col = values[lay.headerRow - 1].map(function (h) { return String(h).replace(/\s+/g, ''); }).indexOf('창립회기직책') + 1;
+  if (col) {
+    var rows = Math.max(1, sh.getMaxRows() - lay.headerRow), rng = sh.getRange(lay.headerRow + 1, col, rows, 1), rules = rng.getDataValidations(), changed = 0, kind = '';
+    for (var i = 0; i < rules.length; i++) {
+      var dv = rules[i][0];
+      if (!dv) continue;
+      kind = String(dv.getCriteriaType());
+      if (dv.getCriteriaType() !== SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) continue;
+      var list = dv.getCriteriaValues()[0];
+      if (list.indexOf(oldTitle) === -1) continue;
+      rules[i][0] = dv.copy().requireValueInList(list.map(function (v) { return v === oldTitle ? newTitle : v; }), true).build();
+      changed++;
+    }
+    if (changed) rng.setDataValidations(rules);
+    out.validation = kind + (changed ? ' — 목록 ' + changed + '칸 갱신' : ' — 갱신 불필요');
+    var dv0 = sh.getRange(lay.headerRow + 1, col).getDataValidation();
+    if (dv0 && dv0.getCriteriaType() === SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) out.list = dv0.getCriteriaValues()[0];
+  }
+  SpreadsheetApp.flush();
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '직책 명칭 변경', oldTitle, oldTitle, newTitle, 'clasp run'); } catch (e) {}
+  return out;
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
