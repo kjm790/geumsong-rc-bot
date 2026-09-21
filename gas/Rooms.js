@@ -74,5 +74,6 @@ function roomRegister_(chat, user, type) {
   else sh.appendRow([String(chat.id), title, type, todayStr_(), '']);
   invalidateRooms_();
   audit_(user, '방 등록', title || String(chat.id), before, type, '');
-  tgSend_(chat.id, '✅ 이 방을 <b>' + type + '</b> 방으로 등록했습니다.\n' + ROOM_TYPES[type].desc.split(' — ')[1] + '\n\n/help 로 이 방에서 쓸 수 있는 명령을 확인하세요.');
+  tgSend_(chat.id, '✅ 이 방을 <b>' + type + '</b> 방으로 등록했습니다.\n' + ROOM_TYPES[type].desc.split(' — ')[1] + '\n\n아래 사용 설명서를 확인하세요. (다시 보기: /guide)');
+  if (before !== type) { try { officePostGuide_(chat.id, type, true); } catch (e) { Logger.log('설명서 게시 실패: ' + e); } }
 }

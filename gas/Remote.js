@@ -14,7 +14,7 @@
 
 // 시트를 바꾸지 않는 명령 — remoteSimulate 가 기본으로 허용하는 범위
 var REMOTE_READONLY_CMDS = ['/help', '/도움말', '/start', '/id', '/whoami', '/내권한', '/recruit', '/모집현황', '/recruitlist', '/모집명단',
-  '/recruitcheck', '/모집점검', '/log', '/로그', '/rooms', '/방목록', '/form', '/양식', '/save', '/보관', '/edu', '/교육', '/schedule', '/일정'];
+  '/recruitcheck', '/모집점검', '/log', '/로그', '/rooms', '/방목록', '/form', '/양식', '/save', '/보관', '/guide', '/사용법', '/안내', '/edu', '/교육', '/schedule', '/일정'];
 
 /**
  * 가상 실행: 텔레그램 업데이트를 실제 시트를 상대로 처리하되, **텔레그램으로는 아무것도 보내지 않고** 봇이 보냈을 내용을 돌려준다.
@@ -65,6 +65,15 @@ function remoteTail_(sheetName, headers, n) {
   var v = getOrCreateSheet_(getSS_(), sheetName, headers).getDataRange().getValues();
   return v.slice(1).slice(-(n || 20)).map(function (r) { return r.map(function (c) { return Object.prototype.toString.call(c) === '[object Date]' ? Utilities.formatDate(c, TZ, 'yyyy-MM-dd HH:mm:ss') : c; }); });
 }
+/** 등록된 방 가운데 해당 유형의 방에 사용 설명서를 올리고 고정한다(실제 텔레그램 전송). 반환: 보낸 방 이름과 성공 여부 */
+function remotePostGuide(type) {
+  if (!ROOM_TYPES[type]) return { error: '없는 방 유형: ' + type, types: Object.keys(ROOM_TYPES) };
+  return rooms_().filter(function (r) { return r.type === type; }).map(function (r) {
+    var res = officePostGuide_(r.chatId, type, true);
+    return { room: r.name, ok: !!(res && res.ok), error: res && !res.ok ? res.description : undefined };
+  });
+}
+
 function remoteErrors(n) { return remoteTail_(ERRORS_SHEET, ERRORS_HEADERS, n); }
 function remoteLog(n) { return remoteTail_(AUDIT_SHEET, AUDIT_HEADERS, n); }
 

@@ -48,6 +48,7 @@ var OFFICE_COMMANDS = [
   { n: ['/schedule', '/일정'], cap: 'view', feat: 'schedule', help: '일정 (2단계 · 준비 중)', run: function (c) { officeNotYet_(c.chat, 2, '일정 알림'); } },
   { n: ['/회비현황', '/미납', '/지출기안', '/승인대기'], cap: 'finance.view', feat: 'finance', help: '회비·지출 (3단계 · 준비 중)', run: function (c) { officeNotYet_(c.chat, 3, '회비·지출'); } },
   { n: ['/월보고'], cap: 'finance.view', feat: 'finance.report', run: function (c) { officeNotYet_(c.chat, 3, '월 보고'); } },
+  { n: ['/guide', '/사용법', '/안내'], cap: 'view', help: '이 방 사용 설명서', run: function (c) { officeCmdGuide_(c); } },
   { n: ['/whoami', '/내권한'], cap: 'view', help: '내 등록 정보',
     run: function (c) { tgSend_(c.chat.id, '👤 ' + escapeHtml_(c.user.name) + (c.user.title ? ' · ' + escapeHtml_(c.user.title) : '') + '\n권한: <b>' + escapeHtml_(c.user.role) + '</b>'); } },
   { n: ['/adduser', '/등록'], cap: '*', help: '(등록할 분의 메시지에 답장으로) /adduser — 사용자 등록, 권한은 버튼 선택', run: function (c) { officeCmdAddUser_(c.msg, c.chat, c.user, c.text); } },
@@ -292,7 +293,7 @@ function installAll() {
 function setOfficeCommands() {
   return tgApi_('setMyCommands', { commands: [
     { command: 'help', description: '도움말' }, { command: 'save', description: '파일 보관 방법(드라이브 자동 저장)' }, { command: 'form', description: '예비회원 추천 양식' }, { command: 'recruit', description: '창립회원 모집 현황' },
-    { command: 'recruitlist', description: '예비회원 명단(상태별)' }, { command: 'whoami', description: '내 등록 정보' }, { command: 'setroom', description: '(관리자) 이 방 등록: 회장단·임원·동호회' },
+    { command: 'recruitlist', description: '예비회원 명단(상태별)' }, { command: 'guide', description: '이 방 사용 설명서' }, { command: 'whoami', description: '내 등록 정보' }, { command: 'setroom', description: '(관리자) 이 방 등록: 회장단·임원·동호회' },
     { command: 'id', description: '대화방·본인 ID' }
   ] });
 }

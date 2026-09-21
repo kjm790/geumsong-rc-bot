@@ -137,6 +137,15 @@ var ec = ctx.officeErrorContext_({ message: { text: '/recruit@bot 홍길동 010-
 assert.ok(ec.what === '명령 /recruit' && !J(ec).match(/홍길동|010/), '오류 기록에 본문·이름·연락처는 남기지 않음');
 assert.strictEqual(ctx.officeErrorContext_({ callback_query: { data: 'doc|abc|1', from: { id: 7 }, message: { chat: { id: 1 } } } }).what, '버튼 doc');
 
+// ── 사용 설명서: 방 유형마다 한 메시지(4096자) 안, 태그 짝 맞음, 임원방 설명서엔 명단·양식 명령 안내가 '안 되는 것'으로만
+['회장단', '임원', '동호회', ''].forEach(function (t) {
+  var g = ctx.officeGuideText_(t);
+  assert.ok(g.length < 4000, t + ' 설명서 길이 ' + g.length);
+  ['b', 'code', 'i'].forEach(function (tag) { assert.strictEqual(g.split('<' + tag + '>').length, g.split('</' + tag + '>').length, t + ' <' + tag + '> 짝'); });
+});
+assert.ok(ctx.officeGuideText_('회장단').indexOf('/adduser') !== -1 && ctx.officeGuideText_('임원').indexOf('/adduser') === -1);
+assert.ok(sayIn(2, 222, '/guide')[0].indexOf('임원방') !== -1 && sayIn(1, 222, '/사용법')[0].indexOf('회장단 방') !== -1 && sayIn(0, 222, '/guide')[0].indexOf('개인 대화창') !== -1, '방마다 다른 설명서');
+
 // ── 드라이브 주소 → 파일 ID
 var FID = '1aBcDeFgHiJkLmNoPqRsTuVwXyZ_0123-45';
 assert.strictEqual(ctx.driveIdFromText_('https://drive.google.com/file/d/' + FID + '/view?usp=drivesdk'), FID);
