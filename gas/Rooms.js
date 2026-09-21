@@ -12,9 +12,9 @@ var ROOMS_HEADERS = ['chat_id', '방 이름', '유형', '등록일', '비고'];
 
 var ROOM_TYPES = {
   '회장단': { desc: '회장단 방 — 예비회원 추천 접수(개인정보)·명단·재무 승인·관리',
-    feats: ['intake', 'docs', 'docs.notify', 'recruit.summary', 'recruit.names', 'edu', 'schedule', 'finance', 'admin', 'report.recruit'] },
+    feats: ['intake', 'docs', 'docs.notify', 'prep', 'recruit.summary', 'recruit.names', 'edu', 'schedule', 'finance', 'admin', 'report.recruit'] },
   '임원':   { desc: '임원·이사회 방 — 교육·일정·모집 현황(숫자)·월 보고. 개인정보·명단은 나오지 않음',
-    feats: ['docs', 'recruit.summary', 'edu', 'schedule', 'finance.report', 'report.recruit'] },
+    feats: ['docs', 'prep', 'recruit.summary', 'edu', 'schedule', 'finance.report', 'report.recruit'] },
   '동호회': { desc: '동호회 방 — 행사 일정·참석 조사만',
     feats: ['schedule'] }
 };

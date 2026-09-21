@@ -37,6 +37,9 @@ var OFFICE_COMMANDS = [
     run: function (c) { tgSend_(c.chat.id, '<code>' + escapeHtml_(intakeFormText_()) + '</code>\n\n↑ 눌러서 복사 → 내용을 채워 이 방에 올리면 명단에 자동 기재됩니다. (여러 명은 양식을 이어 붙이세요)'); } },
   { n: ['/save', '/보관'], cap: 'docs.upload', feat: 'docs', help: '파일 보관 — 봇 1:1 에 파일을 보내거나, 방에서 파일에 답장으로 /보관',
     run: function (c) { tgSend_(c.chat.id, '📁 <b>파일 보관 방법</b>\n① 봇과의 1:1 대화창에 파일을 보내세요(다른 방의 파일을 \'전달\'해도 됩니다).\n② 이 방에서는 파일 설명글에 <code>/보관</code> 을 적어 올리거나, 이미 올라온 파일에 <b>답장</b>으로 <code>/보관</code>.\n→ 폴더 버튼을 누르면 드라이브에 저장되고 링크를 알려 드립니다. (20MB 이하)'); } },
+  { n: ['/prep', '/준비'], cap: 'view', feat: 'prep', help: '창립행사 준비 현황 (/prep all 전체)', run: function (c) { prepReply_(c.chat, c.text); } },
+  { n: ['/done', '/완료'], cap: 'docs.upload', feat: 'prep', help: '/done 번호 [번호…] — 준비 항목 완료 표시 (되돌리기 /undo 번호)', run: function (c) { prepMarkReply_(c.chat, c.user, c.text, true); } },
+  { n: ['/undo', '/되돌리기'], cap: 'docs.upload', feat: 'prep', run: function (c) { prepMarkReply_(c.chat, c.user, c.text, false); } },
   { n: ['/recruit', '/모집현황'], cap: 'view', feat: 'recruit.summary', help: '창립회원 모집 현황', run: function (c) { recruitReply_(c.chat, 'summary'); } },
   { n: ['/confirm', '/확약'], cap: 'roster.add', feat: 'intake', help: '/확약 이름 [이름…] — 확약으로 변경 (같은 방식: /검토중 · /보류)', run: function (c) { recruitSetStatusReply_(c.chat, c.user, c.text, '확약'); } },
   { n: ['/aho', '/아호'], cap: 'roster.add', feat: 'intake', help: '/아호 이름 아호, 이름 아호 … — 아호 기재', run: function (c) { recruitSetAhoReply_(c.chat, c.user, c.text); } },
@@ -187,6 +190,7 @@ function officeCmdLog_(chat) {
 // ── 일일 작업 (dailyCheck 에서 위임) ─────────────────────────
 function officeDaily_() {
   try { postWeeklyRecruitIfDue_(); } catch (e) { Logger.log('모집 현황 보고 실패: ' + e); }
+  try { prepDailyIfDue_(); } catch (e) { Logger.log('준비 알림 실패: ' + e); }
   // 2단계: 일정 D-day 알림 / 3단계: 납기 알림·월 보고 — 모듈 추가 시 여기에 연결
 }
 
@@ -292,7 +296,7 @@ function installAll() {
 
 function setOfficeCommands() {
   return tgApi_('setMyCommands', { commands: [
-    { command: 'help', description: '도움말' }, { command: 'save', description: '파일 보관 방법(드라이브 자동 저장)' }, { command: 'form', description: '예비회원 추천 양식' }, { command: 'recruit', description: '창립회원 모집 현황' },
+    { command: 'help', description: '도움말' }, { command: 'save', description: '파일 보관 방법(드라이브 자동 저장)' }, { command: 'form', description: '예비회원 추천 양식' }, { command: 'prep', description: '창립행사 준비 현황' }, { command: 'done', description: '준비 항목 완료 표시: /done 번호' }, { command: 'recruit', description: '창립회원 모집 현황' },
     { command: 'recruitlist', description: '예비회원 명단(상태별)' }, { command: 'guide', description: '이 방 사용 설명서' }, { command: 'whoami', description: '내 등록 정보' }, { command: 'setroom', description: '(관리자) 이 방 등록: 회장단·임원·동호회' },
     { command: 'id', description: '대화방·본인 ID' }
   ] });
