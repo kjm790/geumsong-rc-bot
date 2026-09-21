@@ -154,4 +154,14 @@ post(null); assert.strictEqual(handled, 1, '비밀값 미설정 클럽은 기존
 PROPS.WEBHOOK_SECRET = 'S3cret'; post(null); post('wrong'); assert.strictEqual(handled, 1, '불일치 → 버림');
 post('S3cret'); assert.strictEqual(handled, 2);
 
+// ── 원격 가상 실행(clasp run): 텔레그램으로 보내지 않고 답장을 돌려준다. 쓰기 명령은 기본 거부
+var beforeSend = ctx.tgSend_;
+var sim = ctx.remoteSimulate({ message: { text: '/help', from: { id: 111 }, chat: { id: 111, type: 'private' } } });
+assert.ok(sim.replies.length === 1 && sim.replies[0].text.indexOf('AI 사무장') !== -1 && sim.error === null && sim.wrote === false, J(sim));
+assert.strictEqual(ctx.tgSend_, beforeSend, '가상 실행 뒤 전송 함수 원상 복구');
+assert.ok(ctx.remoteSimulate({ message: { text: '/확약 홍길동', from: { id: 111 }, chat: { id: 111, type: 'private' } } }).refused, '시트를 바꾸는 명령은 기본 거부');
+assert.ok(ctx.remoteSimulate({ callback_query: { data: 'room:회장단', from: { id: 111 }, message: { chat: { id: 9 } } } }).refused, '버튼도 기본 거부');
+var simErr = ctx.remoteSimulate({ message: { text: '/rooms', from: { id: 111 }, chat: { id: 111, type: 'private' } } });
+assert.ok(simErr.replies.length === 1, '/rooms 가상 실행');
+
 console.log('✅ test-office 통과 (' + dir + ')');
