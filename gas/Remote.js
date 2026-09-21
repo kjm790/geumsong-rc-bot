@@ -69,6 +69,63 @@ function remoteErrors(n) { return remoteTail_(ERRORS_SHEET, ERRORS_HEADERS, n); 
 function remoteLog(n) { return remoteTail_(AUDIT_SHEET, AUDIT_HEADERS, n); }
 
 /**
+ * 명단 시트에 회원 사진 넣기: 「사진」 열(성명 바로 뒤, 없으면 생성)에 썸네일을 셀 안 이미지로 넣고, 메모에 원본 사진 링크를 단다.
+ *  - 사진 위치: 공유드라이브/02_회원명부·가입신청서/회원사진/성명.(jpg|png), 썸네일은 그 아래 '_썸네일(시트용)'/성명.jpg (160px)
+ *  - 파일명(확장자 제외)이 성명과 정확히 같은 회원에게만 넣는다. 셀 이미지가 안 되면 '사진 보기' 링크로 대신한다.
+ *  - 여러 번 실행해도 안전(같은 칸을 다시 채울 뿐). 반환: 누구에게 넣었고 누가 사진이 없는지
+ */
+function remoteRosterPhotos() {
+  var sub = function (parent, name) { var it = parent.getFoldersByName(name); if (!it.hasNext()) throw new Error('폴더 없음: ' + name); return it.next(); };
+  var photos = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '회원사진'), thumbs = sub(photos, '_썸네일(시트용)');
+  var stem = function (n) { return String(n).replace(/\.[A-Za-z0-9]{1,5}$/, '').replace(/\s+/g, ''); };
+  var full = {}, it = photos.getFiles();
+  while (it.hasNext()) { var f = it.next(); full[stem(f.getName())] = f.getUrl(); }
+
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var lay = recruitAhoLayout_(sh.getDataRange().getValues()), head = sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(norm);
+  var col = head.indexOf('사진') + 1, created = false;
+  if (!col) { var after = head.indexOf('성명') + 1; sh.insertColumnAfter(after); col = after + 1; created = true; sh.getRange(lay.headerRow, col).setValue('사진'); }
+  try { sh.setColumnWidth(col, 72); } catch (e) {}
+
+  var values = sh.getDataRange().getValues(), out = { created: created, image: [], link: [], notFound: [], noPhoto: [] }, got = {};
+  var tf = thumbs.getFiles();
+  while (tf.hasNext()) {
+    var t = tf.next(), person = stem(t.getName()), plan = recruitStatusPlan_(values, [person], '(이름 찾기 전용)');
+    if (plan.notFound.length || plan.ambiguous.length) { out.notFound.push(person); continue; }
+    var row = plan.changes[0].row, cell = sh.getRange(row, col), url = full[person] || t.getUrl();
+    try {
+      var blob = t.getBlob(), img = SpreadsheetApp.newCellImage().setSourceUrl('data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()))
+        .setAltTextTitle(person).setAltTextDescription(url).build();
+      cell.setValue(img); out.image.push(person);
+    } catch (e) {
+      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText('사진 보기').setLinkUrl(url).build()); out.link.push(person);
+    }
+    cell.setNote('원본 사진: ' + url).setHorizontalAlignment('center').setVerticalAlignment('middle');
+    try { sh.setRowHeight(row, 72); } catch (e2) {}
+    got[person] = 1;
+  }
+  recruitParse_(sh.getDataRange().getValues()).rows.forEach(function (m) { if (!got[m.name]) out.noPhoto.push(m.name); });
+  SpreadsheetApp.flush();
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '회원 사진 넣기', '명단 「사진」 열', '', out.image.length + out.link.length + '명', 'clasp run'); } catch (e3) {}
+  return out;
+}
+
+/** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
+function remoteRosterPhotoCheck() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var values = sh.getDataRange().getValues(), lay = recruitAhoLayout_(values);
+  var col = values[lay.headerRow - 1].map(function (h) { return String(h).replace(/\s+/g, ''); }).indexOf('사진') + 1;
+  if (!col) return { error: '사진 열 없음' };
+  var out = {};
+  recruitParse_(values).rows.forEach(function (m) {
+    var v = sh.getRange(m.row, col).getValue();
+    out[m.name] = v === '' ? 'EMPTY' : (v && typeof v === 'object' && v.toString() === 'CellImage' ? 'IMAGE' : 'TEXT');
+  });
+  return { column: col, cells: out };
+}
+
+/**
  * 명단 시트의 한 열을 이름 기준으로 채운다(열이 없으면 afterTitle 열 바로 뒤에 새로 만든다).
  *  - pairs: [[성명, 값], …]. 값은 문자로 저장(회원번호가 12,735,853 처럼 바뀌지 않게).
  *  - 이미 다른 값이 들어 있는 칸은 덮어쓰지 않고 conflict 로 돌려준다. 같은 이름이 여러 명이면 건너뛴다.
