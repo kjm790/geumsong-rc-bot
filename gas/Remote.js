@@ -120,6 +120,38 @@ function remoteRosterPhotos() {
   return out;
 }
 
+/** 명단 시트의 열 제목 바꾸기(값은 그대로). 새 제목이 이미 있으면 아무것도 안 함 */
+function remoteRenameColumn(oldTitle, newTitle) {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var lay = recruitAhoLayout_(sh.getDataRange().getValues()), head = sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(norm);
+  if (head.indexOf(norm(newTitle)) !== -1) return { unchanged: newTitle };
+  var col = head.indexOf(norm(oldTitle)) + 1;
+  if (!col) return { error: '열 없음: ' + oldTitle };
+  sh.getRange(lay.headerRow, col).setValue(newTitle);
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '명단 열 제목 변경', col + '열', oldTitle, newTitle, 'clasp run'); } catch (e) {}
+  return { column: col, before: oldTitle, after: newTitle };
+}
+
+/** 「관리위원별 현황」 탭의 관리위원 이름 칸(제목 '관리위원' 바로 아래)을 names 로 채운다. 집계 수식은 이름이 명단의 「담당 관리위원」 값과 같아야 맞는다 */
+function remoteSetManagers(names) {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true));
+  var sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('관리위원') !== -1; })[0];
+  if (!sh) return { error: '관리위원 탭 없음' };
+  var v = sh.getDataRange().getValues(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (String(v[r][0]).replace(/\s+/g, '') === '관리위원') hr = r;
+  if (hr === -1) return { error: "'관리위원' 제목 칸 없음" };
+  var slots = 0;
+  for (var i = hr + 1; i < v.length; i++) { if (/입력하면|자동 집계/.test(String(v[i][0]))) break; slots++; }
+  if (names.length > slots) return { error: '이름 칸이 ' + slots + '개뿐입니다.' };
+  var before = v.slice(hr + 1, hr + 1 + slots).map(function (row) { return row[0]; }).filter(String);
+  var col = names.concat(new Array(slots - names.length).fill('')).map(function (n) { return [n]; });
+  sh.getRange(hr + 2, 1, slots, 1).setValues(col);
+  SpreadsheetApp.flush();
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '관리위원 이름 설정', sh.getName(), before.join(', '), names.join(', '), 'clasp run'); } catch (e) {}
+  return { tab: sh.getName(), before: before, after: names, rows: sh.getRange(hr + 2, 1, names.length, 5).getValues() };
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
@@ -137,10 +169,10 @@ function remoteRosterPhotoCheck() {
 /**
  * 명단 시트의 한 열을 이름 기준으로 채운다(열이 없으면 afterTitle 열 바로 뒤에 새로 만든다).
  *  - pairs: [[성명, 값], …]. 값은 문자로 저장(회원번호가 12,735,853 처럼 바뀌지 않게).
- *  - 이미 다른 값이 들어 있는 칸은 덮어쓰지 않고 conflict 로 돌려준다. 같은 이름이 여러 명이면 건너뛴다.
+ *  - 이미 다른 값이 들어 있는 칸은 덮어쓰지 않고 conflict 로 돌려준다(overwrite=true 면 덮어씀). 같은 이름이 여러 명이면 건너뛴다.
  *  - 로그에는 '누구의 어느 열을 기재했다'만 남기고 값은 남기지 않는다.
  */
-function remoteRosterFill(colTitle, pairs, afterTitle) {
+function remoteRosterFill(colTitle, pairs, afterTitle, overwrite) {
   var id = getProp_('RECRUIT_SHEET_ID', true), ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
   var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
   var lay = recruitAhoLayout_(sh.getDataRange().getValues()), head = sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(norm);
@@ -159,7 +191,7 @@ function remoteRosterFill(colTitle, pairs, afterTitle) {
     if (plan.ambiguous.length) { out.ambiguous.push(pr[0]); return; }
     var row = plan.changes[0].row, cur = values[row - 1][col - 1], before = String(cur === null || cur === undefined ? '' : cur).trim(), v = String(pr[1]).trim();
     if (before === v) { out.same.push(pr[0]); return; }
-    if (before) { out.conflict.push(pr[0]); return; }
+    if (before && !overwrite) { out.conflict.push(pr[0]); return; }
     sh.getRange(row, col).setNumberFormat('@').setValue(v);
     try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, colTitle + ' 기재', pr[0] + ' (' + row + '행)', '', '(기재)', 'clasp run'); } catch (e) {}
     out.written.push(pr[0]);

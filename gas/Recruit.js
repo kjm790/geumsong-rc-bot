@@ -15,7 +15,7 @@
  * 명령(관리자): /모집현황 (/recruit) — 요약, /모집명단 (/recruitlist) — 상태별 이름, /모집점검 (/recruitcheck) — 시트 입력 누락 점검
  */
 var RECRUIT_COLS = {           // 내부 키 → 시트 열 제목
-  name: '성명', aho: '아호', job: '직업분류', referrer: '추천인', engName: '영문명', firstContact: '최초 접촉일',
+  name: '성명', aho: '아호', job: '직업분류', referrer: '추천인', engName: '영문명', joinDate: '가입일',
   status: '확약여부', role: '창립회기 직책', manager: '담당 관리위원', premeet: '예비모임 참석'
 };
 var RECRUIT_STATUS_ORDER = ['확약', '검토중', '보류'];
@@ -50,7 +50,7 @@ function recruitParse_(values) {
     if (noCol !== -1 && !/^\d+$/.test(String(values[i][noCol]).trim())) continue;
     rows.push({
       row: i + 1, name: name, aho: get('aho'), job: get('job'), referrer: get('referrer'), engName: get('engName'),
-      firstContact: get('firstContact'), status: recruitNormStatus_(get('status')), role: get('role'),
+      joinDate: get('joinDate'), status: recruitNormStatus_(get('status')), role: get('role'),
       manager: get('manager'), premeet: get('premeet')
     });
   }
@@ -63,6 +63,11 @@ function recruitRoleRank_(role) {
   if (!role) return 99;
   return ATTEND_ROLE_RANK[role] || ATTEND_ROLE_RANK[roleKey_(role)] || 50;
 }
+
+/**
+ * 새로 접수되는 회원의 가입일(순수): 창립행사 전이면 창립행사일(창립회원으로 입회), 그 뒤면 접수한 날. 창립행사일 미정이면 ''(비워 둠)
+ */
+function recruitJoinDateOf_(today, charter) { return !charter ? '' : (today < charter ? charter : today); }
 
 /** 표기: '아호 성명' (아호 없으면 성명만) */
 function recruitLabel_(m) { return (m.aho ? m.aho + ' ' : '') + m.name; }
@@ -148,7 +153,7 @@ function recruitCheckText_(parsed) {
   var checks = [
     ['manager', '담당 관리위원 미지정', '→ 누가 챙길지 정해야 독려가 됩니다'],
     ['referrer', '추천인 미입력', ''],
-    ['firstContact', '최초 접촉일 미입력', ''],
+    ['joinDate', '가입일 미입력', '→ RI 인준 명단은 인준일, 그 뒤 입회는 창립총회일·입회일'],
     ['engName', '영문명 미입력', '→ RI 회원 등록에 필요']
   ];
   var ok = true;

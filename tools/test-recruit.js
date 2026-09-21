@@ -9,7 +9,7 @@ vm.createContext(ctx);
 fs.readdirSync(dir).filter(function (f) { return /\.js$/.test(f); }).sort()
   .forEach(function (f) { vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f }); });
 
-var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '최초 접촉일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고', '아호'];
+var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고', '아호'];
 function row(no, name, job, ref, eng, status, role, mgr) {
   return [no, name, '여', 1980, job, '가짜상사 / 대표', ref, '010-0000-0000', 'fake@example.com', eng, '', status, role, mgr, '', '', no === 1 ? '청향' : ''];
 }

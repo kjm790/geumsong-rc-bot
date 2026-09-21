@@ -15,7 +15,7 @@ var INTAKE_LABELS = [   // [내부 키, 양식 라벨 첫머리(공백·괄호 �
 ];
 var INTAKE_SHEET_COLS = {   // 내부 키 → 명단 시트 열 제목(공백 무시 비교)
   name: '성명', gender: '성별', birth: '출생년도', job: '직업분류', company: '회사/직위', referrer: '추천인',
-  phone: '연락처', email: '이메일', eng: '영문명', aho: '아호', note: '비고', firstContact: '최초접촉일', status: '확약여부'
+  phone: '연락처', email: '이메일', eng: '영문명', aho: '아호', note: '비고', joinDate: '가입일', status: '확약여부'
 };
 
 function intakeLabelKey_(label) {
@@ -109,7 +109,7 @@ function intakePlan_(values, person, today) {
   var writes = [], put = function (k, v) { if (col[k] !== undefined && v !== '' && v !== undefined) writes.push([col[k] + 1, v]); };
   ['name', 'gender', 'job', 'company', 'referrer', 'phone', 'email', 'eng'].forEach(function (k) { put(k, person[k]); });
   if (person.birth) put('birth', /^\d{4}$/.test(person.birth) ? +person.birth : person.birth);
-  put('firstContact', today);
+  put('joinDate', today);                                   // 호출한 쪽이 넘긴 가입일(빈 값이면 기재 안 함)
   put('status', '검토중');
   put('note', [person.note, homonym ? '동명이인 확인' : ''].filter(Boolean).join(' / '));
   if (person.aho) writes.push([ahoCol + 1, person.aho]);
@@ -140,7 +140,7 @@ function intakeHandle_(chat, user, text) {
   var lines = [];
   try {
     var ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
-    var today = todayStr_();
+    var today = recruitJoinDateOf_(todayStr_(), recruitCharterDate_());   // 가입일 규칙: 창립행사 전 접수 → 창립행사일
     recruitEnsureAhoBeforeName_(sh);
     people.forEach(function (p) {
       var plan = intakePlan_(sh.getDataRange().getValues(), p, today);

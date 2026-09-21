@@ -27,7 +27,7 @@ assert.strictEqual(J([ps[1].name, ps[1].birth, ps[1].aho, ps[1].phone]), J(['김
 assert.strictEqual(ctx.intakeMaskPhone_('010-1234-5678'), '010-****-5678');
 
 // 실제 시트와 같은 모양: 안내 줄 + 6행 제목 + 번호만 있는 빈 자리
-var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '최초 접촉일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고'];
+var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고'];
 var sheet = [['예비회원 명단'], ['안내'], ['총 인원'], [2], ['창립 목표일'], H,
   [1, '가나다', '여', 1980, '의료', '', '', '010-1111-2222', '', '', '', '확약', '회장', '', '', ''],
   [2, '홍길순', '여', 1982, '요식업', '', '', '010-9999-0000', '', '', '', '검토중', '', '', '', ''],
@@ -37,7 +37,11 @@ assert.strictEqual(plan.dupRow, null); assert.strictEqual(plan.targetRow, 9, '�
 assert.ok(plan.needAhoCol && plan.ahoCol === 17, '아호 열이 없으면 맨 오른쪽(17열)에 추가');
 var w = {}; plan.writes.forEach(function (x) { w[x[0]] = x[1]; });
 assert.strictEqual(w[2], '김둘째'); assert.strictEqual(w[4], 1979); assert.strictEqual(w[8], '010-2222-3333');
-assert.strictEqual(w[11], '2026-09-19', '최초 접촉일'); assert.strictEqual(w[12], '검토중'); assert.strictEqual(w[17], '청향');
+assert.strictEqual(w[11], '2026-09-19', '가입일(호출한 쪽이 넘긴 날짜)');
+assert.strictEqual(ctx.recruitJoinDateOf_('2026-09-21', '2026-10-14'), '2026-10-14', '창립행사 전 접수 → 창립행사일');
+assert.strictEqual(ctx.recruitJoinDateOf_('2026-11-02', '2026-10-14'), '2026-11-02', '창립행사 뒤 접수 → 접수일');
+assert.strictEqual(ctx.recruitJoinDateOf_('2026-09-21', ''), '', '창립행사일 미정이면 비워 둠');
+assert.ok(!ctx.intakePlan_(sheet, ps[1], '').writes.some(function (x) { return x[0] === 11; }), '가입일이 빈 값이면 그 칸은 쓰지 않음'); assert.strictEqual(w[12], '검토중'); assert.strictEqual(w[17], '청향');
 assert.ok(!(13 in w) && !(14 in w), '직책·담당 관리위원은 건드리지 않음');
 
 var homo = ctx.intakePlan_(sheet, ps[0], '2026-09-19');     // 같은 이름, 다른 연락처
