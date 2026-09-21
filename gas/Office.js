@@ -54,6 +54,7 @@ var OFFICE_COMMANDS = [
   { n: ['/recruitcheck', '/모집점검'], cap: '*', feat: 'recruit.names', help: '명단 입력 누락 점검', run: function (c) { recruitReply_(c.chat, 'check'); } },
   { n: ['/linkroster', '/명단연결'], cap: '*', feat: 'admin', help: '/linkroster 주소 — 명단 파일 연결(엑셀이면 구글시트로 변환)', run: function (c) { recruitLinkReply_(c.chat, c.user, c.text); } },
   { n: ['/settings', '/설정'], cap: '*', feat: 'admin', help: '설정값·미정 항목', run: function (c) { officeCmdSettings_(c.chat); } },
+  { n: ['/set', '/설정변경'], cap: '*', feat: 'admin', help: '/set 키 값 — 설정 변경 (예: /set 창립일 2026-10-14)', run: function (c) { officeCmdSet_(c.chat, c.user, c.text); } },
   { n: ['/log', '/로그'], cap: '*', feat: 'admin', help: '최근 변경 기록', run: function (c) { officeCmdLog_(c.chat); } },
   { n: ['/rooms', '/방목록'], cap: '*', feat: 'admin', help: '등록된 방 목록', run: function (c) { officeCmdRooms_(c.chat); } },
   { n: ['/diag'], cap: '*', feat: 'admin', run: function (c) { cmdDiag_(c.chat, c.from); } },
@@ -305,4 +306,40 @@ function remotePing() {
       WEBHOOK_URL: has('WEBHOOK_URL'), WEBHOOK_SECRET: has('WEBHOOK_SECRET'), OFFICER_CHAT_ID: has('OFFICER_CHAT_ID'), RECRUIT_SHEET_ID: has('RECRUIT_SHEET_ID') },
     triggers: ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); })
   };
+}
+
+/** /set 키 값 — 설정 탭의 값을 텔레그램에서 변경(관리자). 값은 문자로 저장해 시트가 날짜·숫자로 멋대로 바꾸지 않게 한다 */
+function officeCmdSet_(chat, user, text) {
+  var args = String(text || '').replace(/^\/\S+\s*/, '').trim().split(/\s+/), key = args.shift() || '', value = args.join(' ');
+  if (!key) { tgSend_(chat.id, '사용법: <code>/set 키 값</code>\n예) <code>/set 창립일 2026-10-14</code> · <code>/set 정기모임_요일 화</code> · 비우기: <code>/set 입회비 없음</code>\n키 목록은 /settings'); return; }
+  try { seedSettings_(); } catch (e) {}
+  var sh = getOrCreateSheet_(getSS_(), SETTINGS_SHEET, SETTINGS_HEADERS), plan = settingsSetPlan_(sh.getDataRange().getValues(), key, value);
+  if (plan.error) { tgSend_(chat.id, '⚠️ ' + escapeHtml_(plan.error) + (plan.suggest && plan.suggest.length ? '\n혹시: ' + plan.suggest.map(function (s) { return '<code>' + escapeHtml_(s) + '</code>'; }).join(' · ') : '')); return; }
+  if (plan.before === plan.value) { tgSend_(chat.id, '➖ ' + escapeHtml_(key) + ': 이미 ' + escapeHtml_(plan.value || '(미정)')); return; }
+  if (plan.row) sh.getRange(plan.row, 2).setNumberFormat('@').setValue(plan.value);
+  else sh.appendRow([key, plan.value, '']);
+  invalidateSettings_();
+  audit_(user, '설정 변경', key, plan.before, plan.value, '');
+  var extra = '';
+  if (key === '창립일' && plan.value) { var d = recruitDayDiff_(todayStr_(), plan.value); extra = '\n🗓 창립행사까지 <b>' + (d > 0 ? 'D-' + d : d === 0 ? 'D-DAY' : 'D+' + (-d)) + '</b>'; }
+  tgSend_(chat.id, '✅ <b>' + escapeHtml_(key) + '</b>: ' + escapeHtml_(plan.before || '(미정)') + ' → <b>' + escapeHtml_(plan.value || '(미정)') + '</b>' + extra);
+}
+
+// ── 오류 기록: '오류' 탭에 남겨 개발자가 시트만 읽고 원인을 찾을 수 있게 한다(개인정보·메시지 본문은 남기지 않음) ──
+var ERRORS_SHEET = '오류', ERRORS_HEADERS = ['시각', '무엇을 하다가', '오류', '위치(stack)', 'user_id', '방 유형'];
+/** 업데이트에서 '무엇을 하다가'만 요약(순수): 명령어 이름·버튼 종류·파일 여부. 본문·캡션·이름은 버린다 */
+function officeErrorContext_(update) {
+  var m = update && update.message, cq = update && update.callback_query;
+  if (cq) return { what: '버튼 ' + String(cq.data || '').split('|')[0].split(':')[0], uid: cq.from && cq.from.id, chat: cq.message && cq.message.chat };
+  if (!m) return { what: '(알 수 없음)', uid: '', chat: null };
+  var t = String(m.text || m.caption || '').trim(), what = t.charAt(0) === '/' ? '명령 ' + t.split(/\s+/)[0].split('@')[0] : (docsPickFile_(m) ? '파일' : (intakeLooksLikeForm_(t) ? '추천 양식' : '글'));
+  return { what: what + (m.reply_to_message ? ' (답장)' : ''), uid: m.from && m.from.id, chat: m.chat };
+}
+function officeLogError_(err, update) {
+  try {
+    var c = officeErrorContext_(update), roomType = '';
+    try { roomType = !c.chat ? '' : (c.chat.type === 'private' ? '1:1' : ((roomFind_(rooms_(), c.chat.id) || {}).type || '미등록 방')); } catch (e) {}
+    getOrCreateSheet_(getSS_(), ERRORS_SHEET, ERRORS_HEADERS).appendRow([Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm:ss'), c.what,
+      String(err && err.message || err).slice(0, 500), String(err && err.stack || '').slice(0, 800), String(c.uid || ''), roomType]);
+  } catch (e2) { Logger.log('오류 기록 실패: ' + e2); }
 }

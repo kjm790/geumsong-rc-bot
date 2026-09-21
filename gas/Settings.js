@@ -109,3 +109,26 @@ function seedSettings_() {
 function settingsBlankKeys_(map) {
   return SETTINGS_DEFAULTS.map(function (r) { return r[0]; }).filter(function (k) { return settingIsBlank_(map[k]); });
 }
+
+// ── 설정값 변경: /set 키 값 ─────────────────────────────────
+var SETTINGS_DATE_KEYS = ['RI가입일', '창립일', '명단확정마감', '분담금_청구시작'];
+/** 무엇을 바꿀지 계산(순수). 반환 {row, before, value} 또는 {error[, suggest]} — row 는 1부터. 표에 있는 키만 허용(오타로 새 키가 생기지 않게) */
+function settingsSetPlan_(values, key, value) {
+  var keys = SETTINGS_DEFAULTS.map(function (r) { return r[0]; }), k = String(key || '').trim();
+  if (keys.indexOf(k) === -1) {
+    var low = k.toLowerCase(), sug = keys.filter(function (x) { return x.toLowerCase() === low || x.indexOf(k) !== -1 || (k.length >= 2 && k.indexOf(x) !== -1); });
+    return { error: '없는 설정 키입니다: ' + k, suggest: sug.slice(0, 5) };
+  }
+  var v = String(value === undefined || value === null ? '' : value).trim();
+  if (/^(없음|미정|비움|-)$/.test(v)) v = '';
+  if (v && SETTINGS_DATE_KEYS.indexOf(k) !== -1) {
+    var d = settingDateOf_(v);
+    if (!d) return { error: '날짜는 2026-10-14 처럼 적어 주세요: ' + v };
+    v = d;
+  }
+  for (var i = 1; i < values.length; i++) if (String(values[i][0]).trim() === k) {
+    var b = values[i][1];
+    return { row: i + 1, before: Object.prototype.toString.call(b) === '[object Date]' ? settingDateOf_(b) : String(b === null || b === undefined ? '' : b), value: v };
+  }
+  return { row: 0, before: '', value: v };                   // 표에는 있지만 시트에 아직 없는 키 → 새 줄
+}

@@ -123,6 +123,18 @@ pressIn(1, 222, 'aho|한소연|다솜'); assert.strictEqual(J(ahoCalls), J(['/�
 pressIn(1, 222, 'st|한소연|해킹'); assert.strictEqual(stCalls.length, 0, '목록 밖 상태값 거부');
 pressIn(1, 222, 'st|한소연|확약'); assert.strictEqual(J(stCalls), J(['/확약 한소연=확약']));
 
+// ── /set 계획 · 오류 요약
+var SV = [['키', '값', '설명'], ['창립일', '', ''], ['목표인원', 20, '']];
+assert.strictEqual(J(ctx.settingsSetPlan_(SV, '창립일', '2026.10.14')), J({ row: 2, before: '', value: '2026-10-14' }));
+assert.ok(/날짜는/.test(ctx.settingsSetPlan_(SV, '창립일', '시월 십사일').error));
+assert.strictEqual(ctx.settingsSetPlan_(SV, '목표인원', '25').before, '20');
+assert.strictEqual(ctx.settingsSetPlan_(SV, '입회비', '없음').value, '', "'없음' → 비움, 시트에 없는 키는 row 0(새 줄)");
+var bad = ctx.settingsSetPlan_(SV, '창립', 'x');
+assert.ok(bad.error && bad.suggest.indexOf('창립일') !== -1, '없는 키는 거부 + 비슷한 키 제안');
+var ec = ctx.officeErrorContext_({ message: { text: '/recruit@bot 홍길동 010-0000-0000', from: { id: 7 }, chat: { id: 1, type: 'group' } } });
+assert.ok(ec.what === '명령 /recruit' && !J(ec).match(/홍길동|010/), '오류 기록에 본문·이름·연락처는 남기지 않음');
+assert.strictEqual(ctx.officeErrorContext_({ callback_query: { data: 'doc|abc|1', from: { id: 7 }, message: { chat: { id: 1 } } } }).what, '버튼 doc');
+
 // ── 드라이브 주소 → 파일 ID
 var FID = '1aBcDeFgHiJkLmNoPqRsTuVwXyZ_0123-45';
 assert.strictEqual(ctx.driveIdFromText_('https://drive.google.com/file/d/' + FID + '/view?usp=drivesdk'), FID);

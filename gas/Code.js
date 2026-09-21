@@ -50,6 +50,7 @@ function handleUpdate_(update) {
     if (update.message)        { handleMessage_(update.message); return; }
   } catch (err) {
     Logger.log('handleUpdate_ 오류: ' + err + '\n' + (err && err.stack));
+    if (officeMode_()) officeLogError_(err, update);         // '오류' 탭에 기록(임원방 모드 클럽)
     try {
       var admins = getAdminIds_();
       if (admins.length) tgSend_(admins[0], '⚠️ <b>봇 처리 오류</b>\n<code>' + escapeHtml_(String(err)) + '</code>');
