@@ -51,7 +51,7 @@ var OFFICE_COMMANDS = [
   { n: ['/whoami', '/내권한'], cap: 'view', help: '내 등록 정보',
     run: function (c) { tgSend_(c.chat.id, '👤 ' + escapeHtml_(c.user.name) + (c.user.title ? ' · ' + escapeHtml_(c.user.title) : '') + '\n권한: <b>' + escapeHtml_(c.user.role) + '</b>'); } },
   { n: ['/adduser', '/등록'], cap: '*', help: '(등록할 분의 메시지에 답장으로) /adduser — 사용자 등록, 권한은 버튼 선택', run: function (c) { officeCmdAddUser_(c.msg, c.chat, c.user, c.text); } },
-  { n: ['/recruitcheck', '/모집점검'], cap: '*', feat: 'recruit.names', help: '명단 입력 누락 점검', run: function (c) { recruitReply_(c.chat, 'check'); } },
+  { n: ['/recruitcheck', '/모집점검'], cap: 'roster.add', feat: 'recruit.names', help: '명단 입력 누락 점검', run: function (c) { recruitReply_(c.chat, 'check'); } },
   { n: ['/linkroster', '/명단연결'], cap: '*', feat: 'admin', help: '/linkroster 주소 — 명단 파일 연결(엑셀이면 구글시트로 변환)', run: function (c) { recruitLinkReply_(c.chat, c.user, c.text); } },
   { n: ['/settings', '/설정'], cap: '*', feat: 'admin', help: '설정값·미정 항목', run: function (c) { officeCmdSettings_(c.chat); } },
   { n: ['/set', '/설정변경'], cap: '*', feat: 'admin', help: '/set 키 값 — 설정 변경 (예: /set 창립일 2026-10-14)', run: function (c) { officeCmdSet_(c.chat, c.user, c.text); } },
