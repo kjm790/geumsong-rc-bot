@@ -97,6 +97,11 @@ var sp = ctx.recruitStatusPlan_(values, ['라마바', '사아자', ' 차카타 '
 assert.strictEqual(JSON.stringify(sp.changes.map(function (c) { return c.name + ':' + c.before + '@' + c.row + ',' + c.col; })), JSON.stringify(['사아자:검토중@9,12', '차카타:검토중@10,12']));
 assert.strictEqual(JSON.stringify([sp.same, sp.notFound, sp.ambiguous]), JSON.stringify([['라마바'], ['없는사람'], ['가나다']]), '이미 같은 상태·없는 이름·동명이인 구분, 중복 입력은 1회만');
 
+// 동호회장 표기
+var withSub = ctx.recruitListText_([{ row: 7, name: '차기', aho: '류', status: '확약', role: '차기회장' }, { row: 8, name: '일반', status: '확약', role: '' }], { '차기': '골프회장', '일반': '문화레저동호회장' }).replace(/<[^>]+>/g, '');
+assert.ok(withSub.indexOf('차기회장(골프회장)') !== -1 && withSub.indexOf('일반 — 문화레저동호회장') !== -1, withSub);
+assert.strictEqual(ctx.recruitNameOf_('동우 김종만'), '김종만'); assert.strictEqual(ctx.recruitNameOf_('김종만'), '김종만'); assert.strictEqual(ctx.recruitNameOf_(''), '');
+
 // 제목 줄이 없으면 명확한 오류
 assert.throws(function () { ctx.recruitParse_([['아무거나'], ['이름', '상태']]); }, /성명/);
 // D-day 없이도 동작

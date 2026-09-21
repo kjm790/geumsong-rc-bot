@@ -69,6 +69,17 @@ function recruitRoleRank_(role) {
  */
 function recruitJoinDateOf_(today, charter) { return !charter ? '' : (today < charter ? charter : today); }
 
+/** 설정 값('아호 성명')에서 성명만(순수): 마지막 낱말. '동우 김종만' → '김종만' */
+function recruitNameOf_(v) { var t = String(v || '').trim().split(/\s+/); return t[t.length - 1] || ''; }
+/** 동호회장 표기 {성명: '골프회장'} — 설정 탭의 「골프회_회장」·「문화레저동호회_회장」 */
+function recruitSubTitles_() {
+  var out = {};
+  try {
+    [['골프회_회장', '골프회장'], ['문화레저동호회_회장', '문화레저동호회장']].forEach(function (k) { var n = recruitNameOf_(setting_(k[0], '')); if (n) out[n] = k[1]; });
+  } catch (e) {}
+  return out;
+}
+
 /** 표기: '아호 성명' (아호 없으면 성명만) */
 function recruitLabel_(m) { return (m.aho ? m.aho + ' ' : '') + m.name; }
 
@@ -131,14 +142,15 @@ function recruitSummaryText_(rows, today, charter) {
 }
 
 /** 상태별 이름 목록(성명 + 직업분류 + 내정 직책). 연락처 등은 애초에 읽지 않음. */
-function recruitListText_(rows) {
+function recruitListText_(rows, subs) {
+  subs = subs || {};
   var s = recruitSummary_(rows), L = ['🌱 <b>' + CLUB.short + ' 예비회원 명단</b>', UI_LINE];
   recruitStatusKeys_(s.byStatus).forEach(function (k) {
     L.push('▌<b>' + escapeHtml_(k) + '</b> ' + s.byStatus[k] + '명');
     rows.filter(function (m) { return m.status === k; })
       .sort(function (a, b) { return recruitRoleRank_(a.role) - recruitRoleRank_(b.role) || a.row - b.row; })
       .forEach(function (m, i) {
-      L.push('  ' + (i + 1) + '. ' + escapeHtml_(recruitLabel_(m)) + (m.role ? ' — ' + roleBadge_(m.role) + ' ' + escapeHtml_(m.role) : '') +
+      L.push('  ' + (i + 1) + '. ' + escapeHtml_(recruitLabel_(m)) + (m.role ? ' — ' + roleBadge_(m.role) + ' ' + escapeHtml_(m.role) + (subs[m.name] ? '(' + escapeHtml_(subs[m.name]) + ')' : '') : (subs[m.name] ? ' — ' + escapeHtml_(subs[m.name]) : '')) +
         (m.job ? '  <i>' + escapeHtml_(m.job) + '</i>' : ''));
     });
     L.push('');
@@ -197,7 +209,7 @@ function cmdRecruit_(chat, from, mode) {
 function recruitReply_(chat, mode) {
   var parsed;
   try { parsed = recruitLoad_(); } catch (e) { tgSend_(chat.id, '⚠️ 모집 명단을 읽지 못했습니다: ' + escapeHtml_(e.message)); return; }
-  var text = mode === 'list' ? recruitListText_(parsed.rows) + (parsed.rows.some(function (m) { return m.aho; }) ? '' : '\n\n<i>💡 아호 넣기: /아호 이름 아호, 이름 아호 …  (시트의 성명 앞 「아호」 칸에 직접 적어도 됩니다)</i>')
+  var text = mode === 'list' ? recruitListText_(parsed.rows, recruitSubTitles_()) + (parsed.rows.some(function (m) { return m.aho; }) ? '' : '\n\n<i>💡 아호 넣기: /아호 이름 아호, 이름 아호 …  (시트의 성명 앞 「아호」 칸에 직접 적어도 됩니다)</i>')
     : mode === 'check' ? recruitCheckText_(parsed)
     : recruitSummaryText_(parsed.rows, todayStr_(), recruitCharterDate_());
   tgSend_(chat.id, text);

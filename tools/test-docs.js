@@ -50,6 +50,8 @@ var kb = ctx.docsButtons_('abc123', all, '04_재무(회비·장부·영수증)')
 var flat = [].concat.apply([], kb.inline_keyboard);
 assert.ok(flat.some(function (b) { return b.text === '✅ 04_재무' && b.callback_data === 'doc|abc123|4'; }) && flat[flat.length - 1].callback_data === 'doc|abc123|x');
 assert.ok(flat.every(function (b) { return Buffer.byteLength(b.callback_data) <= 64; }));
+assert.ok(flat.some(function (b) { return b.text === '동호회·골프회' && b.callback_data === 'doc|abc123|8'; }), '동호회 폴더 버튼(목록 맨 뒤 순번)');
+assert.strictEqual(ctx.DOCS_FOLDERS[4].name, '04_재무(회비·장부·영수증)', '기존 폴더 순번은 그대로여야 함(버튼 값이 순번)');
 
 // 라우터: 등록자만, 방 기능 확인
 var users = [{ userId: '222', name: '가회장', title: '', role: '회장', active: true }, { userId: '555', name: '참관', title: '', role: '참관', active: true }];
