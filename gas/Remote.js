@@ -156,6 +156,28 @@ function remoteSetManagers(names) {
 }
 
 /**
+ * 구글 문서의 내용을 HTML 원본으로 통째로 교체한다(문서 ID·주소·공유 설정은 그대로).
+ *  - 원본 HTML 은 공유드라이브 「99_봇데이터/_문서원본/<htmlName>」 에 둔다(리포의 clubs/<club>/docs/*.html 을 복사).
+ *  - Drive 업로드 API 의 '가져오기 변환'을 쓰므로 새 권한(문서 API)이 필요 없다 — 기존 드라이브 권한으로 동작.
+ *  - 문서에 사람이 직접 고친 내용이 있으면 사라진다 → 봇이 관리하는 안내 문서에만 쓸 것.
+ */
+function remoteDocFromHtml(docId, htmlName) {
+  var sub = function (parent, name) { var it = parent.getFoldersByName(name); if (!it.hasNext()) throw new Error('폴더 없음: ' + name); return it.next(); };
+  var src = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '99_봇데이터'), '_문서원본').getFilesByName(htmlName);
+  if (!src.hasNext()) return { error: '원본 없음: ' + htmlName };
+  var doc = DriveApp.getFileById(docId);
+  if (doc.getMimeType() !== 'application/vnd.google-apps.document') return { error: '구글 문서가 아닙니다: ' + doc.getName() };
+  var bytes = Utilities.newBlob(src.next().getBlob().getDataAsString('UTF-8'), 'text/html').getBytes();
+  var res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files/' + docId + '?uploadType=media&supportsAllDrives=true', {
+    method: 'patch', contentType: 'text/html; charset=UTF-8', payload: bytes,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+  });
+  var ok = res.getResponseCode() === 200;
+  if (ok) { try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '문서 내용 교체', doc.getName(), '', htmlName + ' (' + bytes.length + ' bytes)', 'clasp run'); } catch (e) {} }
+  return { ok: ok, code: res.getResponseCode(), doc: doc.getName(), bytes: bytes.length, error: ok ? undefined : res.getContentText().slice(0, 300) };
+}
+
+/**
  * 직책 명칭 바꾸기(예: '분과6 위원장(명칭 미정)' → 'DEI위원장'): 명단 파일의 모든 탭에서 그 글자와 '완전히 같은' 칸을 바꾸고,
  * 명단 「창립회기 직책」 열의 드롭다운이 직접 입력한 목록이면 목록 값도 바꾼다(범위를 참조하는 드롭다운이면 칸만 바꾸면 따라온다).
  * 봇 데이터시트의 「임원」 탭도 함께 바꾼다.
