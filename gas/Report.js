@@ -18,7 +18,7 @@ function monthReport_(ym) {
     else { expCat[cat] = (expCat[cat] || 0) + amt; expTot += amt; }
   }
   var p = ym.split('-');
-  var L = ['📊 <b>대구금송RC 월 재무보고</b>', UI_LINE, '🗓 ' + p[0] + '년 ' + parseInt(p[1], 10) + '월', ''];
+  var L = ['📊 <b>' + CLUB.short + ' 월 재무보고</b>', UI_LINE, '🗓 ' + p[0] + '년 ' + parseInt(p[1], 10) + '월', ''];
   L.push('▌<b>수입</b> 합계 ' + duesFmt_(incTot) + '원');
   L = L.concat(reportCatLines_(incCat));
   L.push('', '▌<b>지출</b> 합계 ' + duesFmt_(expTot) + '원');

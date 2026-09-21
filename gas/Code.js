@@ -1,13 +1,11 @@
 /**
- * Code.js — 대구금송로타리클럽 'AI사무장봇' 메인 (GAS / 웹훅)
+ * Code.js — 로타리클럽 'AI사무장봇' 메인 (GAS / 웹훅) — 전 클럽 공용 코어, 클럽 값은 Club.js
  *
  * 동작
  *  - 웹훅(doPost): 회원 버튼 응답·명령을 즉시 처리
  *  - 시간 트리거(dailyCheck): 매일 1회 → 월말이면 출석조사, 행사 D-N이면 리마인더
  *
- * 핵심 정기 행사 2종(EVENTS, Config.js):
- *  - 정기모임          : 첫째 화요일 19:30
- *  - 자유재활원 정기봉사 : 셋째 토요일 10:00
+ * 정기 행사(요일·시각)는 클럽별 Club.js 의 EVENTS 에 정의한다.
  *
  * 설치 순서는 README.md 참고.
  */
@@ -15,6 +13,11 @@
 // ───────────────────────────────────── 웹앱 엔드포인트
 function doPost(e) {
   try {
+    var secret = getProp_('WEBHOOK_SECRET', false);
+    if (secret && (!e.parameter || e.parameter.k !== secret)) {   // 프록시(Worker)를 거치지 않은 요청 = 위조 가능 → 버림
+      Logger.log('doPost 거부: 비밀값 불일치');
+      return ContentService.createTextOutput('ok');
+    }
     var update = JSON.parse(e.postData.contents);
     handleUpdate_(update);
   } catch (err) {
@@ -30,6 +33,10 @@ function doGet(e) {
     catch (er) { out.push('triggers_ERR=' + er); }
     out.push('WEBHOOK_URL_set=' + !!getProp_('WEBHOOK_URL', false));
     out.push('paused=' + isPaused_());
+    out.push('office_mode=' + officeMode_());
+    out.push('WEBHOOK_SECRET_set=' + !!getProp_('WEBHOOK_SECRET', false));
+    out.push('OFFICER_CHAT_ID_set=' + !!getProp_('OFFICER_CHAT_ID', false));
+    out.push('RECRUIT_SHEET_ID_set=' + !!getProp_('RECRUIT_SHEET_ID', false));
     return ContentService.createTextOutput(out.join('\n'));
   }
   return ContentService.createTextOutput('AI사무장봇 작동 중');
@@ -99,6 +106,7 @@ function memberLabel_(m) {
 
 // ───────────────────────────────────── 메시지(명령) 처리
 function handleMessage_(msg) {
+  if (officeMode_()) { officeHandleMessage_(msg); return; }   // 임원방 모드 클럽은 전용 라우터(등록된 user_id 만)
   var chat = msg.chat;
   var from = msg.from;
   var fullName = ((from.first_name || '') + ' ' + (from.last_name || '')).trim();
@@ -139,6 +147,9 @@ function handleMessage_(msg) {
       case '/pause': case '/일시정지': cmdPause_(chat, from); break;
       case '/resume': case '/재개': cmdResume_(chat, from); break;
       case '/diag': cmdDiag_(chat, from); break;
+      case '/모집현황': case '/recruit': cmdRecruit_(chat, from, 'summary'); break;
+      case '/모집명단': case '/recruitlist': cmdRecruit_(chat, from, 'list'); break;
+      case '/모집점검': case '/recruitcheck': cmdRecruit_(chat, from, 'check'); break;
       default: break;
     }
     return;
@@ -178,7 +189,7 @@ function cmdStart_(chat, from, fullName) {
   var member = getMemberById_(from.id);
   var addr = (member && member.name) ? (member.aho || member.name) : displayName_(fullName, from.username);
   var msg = isNew
-    ? '환영합니다, ' + addr + ' 님! 🎉\n대구금송로타리클럽 <b>AI사무장봇</b>에 등록되었습니다.\n앞으로 정기모임·봉사활동 출석 안내를 보내드리겠습니다.'
+    ? '환영합니다, ' + addr + ' 님! 🎉\n' + CLUB.name + ' <b>AI사무장봇</b>에 등록되었습니다.\n앞으로 정기모임·봉사활동 출석 안내를 보내드리겠습니다.'
     : addr + ' 님, 이미 등록되어 있습니다. 반갑습니다! 🙌';
   tgSend_(chat.id, msg);
 }
@@ -189,7 +200,7 @@ function escapeHtml_(s) {
 
 /** 회비 안내 — 회기·공통회비·분담금·신입·PHF. 누른 사람이 임원이면 본인 분담금까지 표시. */
 function cmdDues_(chat, from) {
-  var L = ['💰 <b>대구금송RC 회비 안내</b>', UI_LINE, '🗓 회기: 7/1 ~ 익년 6/30'];
+  var L = ['💰 <b>' + CLUB.short + ' 회비 안내</b>', UI_LINE, '🗓 회기: 7/1 ~ 익년 6/30'];
   var member = getMemberById_(from.id);
   if (member && member.name) {
     var role = clubRole_(member.name);
@@ -199,17 +210,7 @@ function cmdDues_(chat, from) {
       ? '👤 <b>' + who + '</b> 님(' + escapeHtml_(role) + ') → 공통 회비 <b>+ 분담금 ' + share + '만원</b>'
       : '👤 <b>' + who + '</b> 님 → 공통 회비');
   }
-  L.push('', '▌<b>공통 회비</b> (전 회원 동일)',
-    ' • 연회비 70만원', ' • 의무봉사금 30만원', ' • 주회비 12만원', ' • RFSM $100 (154,000원)');
-  L.push('', '▌<b>회장단·이사진 분담금</b> (공통 회비에 추가)',
-    ' • 회장 300만원', ' • 차기회장 200만원', ' • 부회장 100만원',
-    ' • 이사진 각 50만원', '   └ 총무·재무·사찰이사 + 상임위원장 7',
-    '     (공공이미지·로타리재단·봉사프로젝트·IT·DEI·클럽관리·멤버십)');
-  L.push('', '▌<b>신입회원</b>', ' • 공통 회비 + 봉사의연금 30만원',
-    '   └ 가입비 대신, 한국장학재단 기부(영수증 발행)');
-  L.push('', '▌<b>로타리재단 기부</b> (참고)',
-    ' • PHF $1,000 (7월 기준 1,540,000원)', ' • RFSM $100 (7월 기준 154,000원)',
-    ' • ※ PHF 기부회원은 RFSM 제외');
+  L = L.concat(CLUB.duesInfo);            // 금액 안내 본문은 클럽마다 다름(Club.js)
   tgSend_(chat.id, L.join('\n'));
 }
 
@@ -222,11 +223,11 @@ function isBandCmd_(token) {
 /** 첫 토큰(명령어) 제거 후 본문만 */
 function stripBandCmd_(s) { return String(s || '').replace(/^\/\S+\s*/, '').trim(); }
 /** 밴드 소식 헤더(구분선까지) */
-function bandHeader_() { return '⚙️ <b>국제로타리 3700지구 · 밴드 소식</b>\n' + UI_LINE; }
+function bandHeader_() { return '⚙️ <b>' + CLUB.district + ' · 밴드 소식</b>\n' + UI_LINE; }
 /** 헤더 + 본문(HTML 이스케이프) */
 function bandBody_(content) { return bandHeader_() + '\n' + escapeHtml_(content); }
 
-/** (반자동) 관리자가 보낸 밴드 글을 단톡에 '3700지구 밴드 소식'으로 게시 */
+/** (반자동) 관리자가 보낸 밴드 글을 단톡에 '지구 밴드 소식'으로 게시 */
 function cmdBandPost_(chat, from, text) {
   if (!requireAdmin_(chat, from)) return;
   var content = stripBandCmd_(text);   // 명령어 토큰 제거
@@ -349,7 +350,7 @@ function cmdUnmatched_(chat, from) {
 
 function cmdHelp_(chat, from) {
   var common =
-    '🤖 <b>AI사무장봇 도움말</b>\n대구금송로타리클럽 정기모임·봉사 출석을 도와드립니다.\n\n' +
+    '🤖 <b>AI사무장봇 도움말</b>\n' + CLUB.name + ' 정기모임·봉사 출석을 도와드립니다.\n\n' +
     '• /start — 회원 등록\n• /check — 출석 버튼 다시 띄우기\n• /회비 — 회비 안내\n• /id — 이 대화방의 chat ID 확인\n• /help — 도움말\n';
   var admin =
     '\n<b>관리자 전용</b>\n' +
@@ -358,7 +359,7 @@ function cmdHelp_(chat, from) {
     '• /remind — 지금 즉시 미응답자 리마인더(전체 행사)\n' +
     '• /members — 등록 회원 목록(아호·성명순)\n' +
     '• /board — 임원방에 불참·미응답 실시간 현황 띄우기\n' +
-    '• /밴드 — (다음 줄에 글·링크 붙여넣어) 3700지구 밴드 소식을 단톡에 게시\n' +
+    '• /밴드 — (다음 줄에 글·링크 붙여넣어) ' + CLUB.district.replace(/^국제로타리\s*/, '') + ' 밴드 소식을 단톡에 게시\n' +
     '       └ 사진: 사진 캡션 칸에 /밴드+내용 (여러 장 앨범도 가능)\n' +
     '• /unmatched — 명부 미매칭 회원 확인\n' +
     '• /audit — 전체 오매칭·미매칭 일괄 점검\n' +
@@ -427,6 +428,7 @@ function cmdMembers_(chat, from) {
 
 // ───────────────────────────────────── 버튼(콜백) 처리
 function handleCallback_(cq) {
+  if (officeMode_()) { officeHandleCallback_(cq); return; }
   var data = cq.data || '';
   if (data === 'refresh') {
     var rc = CacheService.getScriptCache();
@@ -687,7 +689,7 @@ function buildViewFull_(kind) {
     }
     return '📅 <b>' + ev.name + '</b>  <i>' + formatMeetingDate_(meeting, ev.hour, ev.minute) + '</i>  · ' + arr.length + '명\n' + names;
   });
-  return '⚙️ <b>대구금송RC</b> · ' + head + '\n' + UI_LINE + '\n' + lines.join('\n\n');
+  return '⚙️ <b>' + CLUB.short + '</b> · ' + head + '\n' + UI_LINE + '\n' + lines.join('\n\n');
 }
 
 /** 1:1 미개설 시 팝업 요약(200자 제한) */
@@ -851,7 +853,7 @@ function pastPresidentPraise_(member, title, seed) {
   var pool = [
     '🎖 <b>' + label + '</b> 님 참석!\n클럽의 역사를 만들어 주신 ' + title + '님을 AI사무장이 두 손 모아 환영합니다 🙇‍♂️\n회원 여러분, 선배 회장님께 감사의 박수 👏👏',
     '👏 <b>' + label + '</b> 님께서 함께해 주십니다!\n' + title + '님의 한 걸음이 후배들에게 큰 귀감입니다. AI사무장 깊이 감사드립니다 🙇‍♂️',
-    '🌟 <b>' + label + '</b> 님 참석!\n오늘도 빛나는 ' + title + '님의 자리, 금송의 자랑입니다 ✨ 감사합니다!'
+    '🌟 <b>' + label + '</b> 님 참석!\n오늘도 빛나는 ' + title + '님의 자리, ' + CLUB.nick + '의 자랑입니다 ✨ 감사합니다!'
   ];
   return pool[Math.abs(seed || 0) % pool.length];
 }
@@ -862,7 +864,7 @@ function presidentPraise_(addr, seed) {
     '🎉🎊 <b>회장님 등장!</b> 🎊🎉\n' + addr + ' 회장님께서 친히 <b>참석</b> 버튼을 눌러주셨습니다! 👑\nAI사무장, 감격하여 90도로 인사 올립니다 🙇‍♂️\n회원 여러분~ 회장님께 우레와 같은 박수 👏👏👏',
     '🚨 <b>속보</b> 🚨\n' + addr + ' 회장님 참석 확정! 오늘 모임은 이미 절반의 성공입니다 ✨\nAI사무장이 가장 큰 절을 올립니다 🙇‍♂️🙇‍♂️🙇‍♂️',
     '👑 ' + addr + ' 회장님 참석이오!\n사무장봇, 기쁨에 겨워 폭죽을 터뜨립니다 🎆🎆\n“회장님 한 분이 백 명의 힘” — 회원 여러분도 박수 부탁드립니다 👏',
-    '🎺 빠밤~ ' + addr + ' 회장님 납시오! 🎺\n참석 확인! AI사무장 무한 감사드리며 큰절 올립니다 🙇‍♂️\n오늘도 금송의 기운이 차오릅니다 🔥'
+    '🎺 빠밤~ ' + addr + ' 회장님 납시오! 🎺\n참석 확인! AI사무장 무한 감사드리며 큰절 올립니다 🙇‍♂️\n오늘도 ' + CLUB.nick + '의 기운이 차오릅니다 🔥'
   ];
   return pool[Math.abs(seed || 0) % pool.length];
 }
@@ -877,9 +879,9 @@ function absentPresidentMsg_(addr) {
 
 // ── 공통 UI(고급 디자인) ──────────────────────────────────────
 var UI_LINE = '━━━━━━━━━━━━━';
-var UI_CLUB = '국제로타리 3700지구 · 대구금송RC';
-var UI_THEME = '🌍 지속적인 영향력을 · CREATE LASTING IMPACT';
-var UI_SLOGAN = '🤝 봉사는 팩트 · 기부는 임팩트 · 사랑은 퍼펙트';
+var UI_CLUB = CLUB.district + ' · ' + CLUB.short;
+var UI_THEME = CLUB.theme;
+var UI_SLOGAN = CLUB.slogan;
 
 // ───────────────────────────────────── 발송 빌더
 function attendanceKeyboard_(eventKey, meetingDate) {
@@ -911,7 +913,7 @@ function floatBoard_() {
       '   ✅ <b>참석 ' + ordered.length + '명</b>\n' + attendList + '\n' +
       '   ❌ 불참 ' + s.absent.length + '  ·  ❔ 미응답 ' + s.no_response.length;
   });
-  var text = '⚙️ <b>실시간 출석 현황</b> · 대구금송RC\n' + UI_LINE + '\n' + blocks.join('\n\n') +
+  var text = '⚙️ <b>실시간 출석 현황</b> · ' + CLUB.short + '\n' + UI_LINE + '\n' + blocks.join('\n\n') +
     '\n' + UI_LINE + '\n👇 아직이라면 아래에서 선택해 주세요';
 
   var key = 'FLOAT_BTN_MSG';
@@ -1113,12 +1115,13 @@ function sendPersonalNudges_(ev, meeting) {
   if (failed.length && getOfficerChatId_() && weekdayOf_(t.y, t.m, t.d) === 1) {
     tgSend_(getOfficerChatId_(),
       '⚠️ <b>개인 독려 미도달</b> ' + failed.length + '명 (봇 1:1 미시작):\n' + failed.join(', ') +
-      '\n→ 해당 회원께 @geumsong_secretary_bot 과 1:1 대화에서 /start 1회를 부탁드리세요.');
+      '\n→ 해당 회원께 @' + CLUB.botUsername + ' 과 1:1 대화에서 /start 1회를 부탁드리세요.');
   }
 }
 
 // ───────────────────────────────────── 시간 트리거(매일 점검)
 function dailyCheck() {
+  if (officeMode_()) { officeDaily_(); return; }
   if (isPaused_()) {
     Logger.log('⏸ 일시정지 중 — 출석조사/리마인더/다이제스트/개인독려 생략');
     postMonthlyReportIfDue_();   // 임원방 월 재무보고는 정기모임 공지 업무와 무관하므로 유지
@@ -1149,6 +1152,8 @@ function dailyCheck() {
 
   // 매월 1일 → 전월 재무보고 임원방 자동 게시(1회)
   postMonthlyReportIfDue_();
+  // 신생클럽: 매주 월요일 창립회원 모집 현황 임원방 보고(RECRUIT_SHEET_ID 설정된 클럽만)
+  try { postWeeklyRecruitIfDue_(); } catch (e) { Logger.log('모집 현황 보고 실패: ' + e); }
 }
 
 // ───────────────────────────────────── 설치/운영 함수 (에디터에서 1회 실행)
@@ -1164,14 +1169,15 @@ function setup() {
   if (id) {
     ss = SpreadsheetApp.openById(id);
   } else {
-    ss = SpreadsheetApp.create('AI사무장봇 데이터');
+    ss = SpreadsheetApp.create(CLUB.dataSheetName);
     props_().setProperty('SHEET_ID', ss.getId());
     var folderId = props_().getProperty('DRIVE_FOLDER_ID');
     if (folderId) {
       try {
-        var file = DriveApp.getFileById(ss.getId());
-        DriveApp.getFolderById(folderId).addFile(file);
-        DriveApp.getRootFolder().removeFile(file);   // 내 드라이브에서 제거
+        // moveTo 는 공유드라이브에도 동작(addFile/removeFile 은 공유드라이브에서 실패). '99_봇데이터' 폴더가 있으면 그 안으로.
+        var target = DriveApp.getFolderById(folderId);
+        var sub = target.getFoldersByName('99_봇데이터');
+        DriveApp.getFileById(ss.getId()).moveTo(sub.hasNext() ? sub.next() : target);
       } catch (e) {
         Logger.log('폴더 이동 실패(무시 가능): ' + e);
       }

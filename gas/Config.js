@@ -1,7 +1,9 @@
 /**
- * Config.js — 설정 / Script Properties / 행사 정의
+ * Config.js — 설정 / Script Properties / 행사 헬퍼 (전 클럽 공용 코어)
  *
- * 대구금송로타리클럽 'AI사무장봇' (Google Apps Script 버전)
+ * 로타리클럽 'AI사무장봇' (Google Apps Script 버전)
+ * 클럽별 값(CLUB·EVENTS·CLUB_ROLES·PAST_PRESIDENTS·SUB_TITLES·SHARE_BY_ROLE·ROSTER_SEED)은
+ * clubs/<클럽>/Club.js 에 있다. 이 파일에는 클럽 이름·사람 이름을 쓰지 않는다.
  *
  * 비밀값은 Script Properties(프로젝트 설정 > 스크립트 속성)에 저장합니다.
  *   BOT_TOKEN        : BotFather 토큰
@@ -13,28 +15,7 @@
  *   DRIVE_FOLDER_ID  : (선택) 데이터 시트를 만들 공유드라이브 폴더 ID
  */
 
-// 행사 종류(kind):
-//  - 'recurring'      : 매월 N째 요일 고정 + 출석 버튼/집계/리마인더 (정기모임·봉사)
-//  - 'monthly_notice' : 시각 미지정. 정기모임에서 '익월 행사'로 안내만(출석 집계 없음). (동호회)
-//
-// ⚠️ recurring 의 요일은 JavaScript 기준: 0=일 1=월 2=화 3=수 4=목 5=금 6=토 (화=2, 토=6)
-var EVENTS = [
-  { key: 'event1', name: '정기모임',            kind: 'recurring', weekday: 2, nth: 1, hour: 19, minute: 30 }, // 첫째 화요일 19:30
-  { key: 'event2', name: '자유재활원 정기봉사', kind: 'recurring', weekday: 6, nth: 3, hour: 10, minute: 0  }, // 셋째 토요일 10:00
-
-  // 골프회 — 홀수월, 달마다 내용이 다름
-  {
-    key: 'event3', name: '골프회', kind: 'monthly_notice',
-    officers: '회장 찰수 서상일 · 부회장 범정 김현태 · 총무 다원 이경환', // 2026-27 회기
-    activities: { '7': '스크린 골프', '9': '정기 라운딩', '11': '정기 라운딩', '1': '스크린 골프', '3': '정기 라운딩', '5': '골프회장배' }
-  },
-  // 문화레저동호회 — 8·10·12·2·4월, 전 회원 대상(형태는 회차별)
-  {
-    key: 'event4', name: '문화레저동호회', kind: 'monthly_notice',
-    months: [8, 10, 12, 2, 4], activity: '전 회원 대상 행사 (음악회·미술관·영화·강연·스포츠 중)'
-  }
-];
-
+// 행사 정의(EVENTS)는 Club.js. kind: 'recurring'(출석 집계) / 'monthly_notice'(안내만)
 function recurringEvents_() { return EVENTS.filter(function (e) { return e.kind === 'recurring'; }); }
 function noticeEvents_()    { return EVENTS.filter(function (e) { return e.kind === 'monthly_notice'; }); }
 
@@ -117,51 +98,17 @@ function getGroupChatId_()  { return getProp_('GROUP_CHAT_ID', true); }
 function getOfficerChatId_(){ var v = getProp_('OFFICER_CHAT_ID', false); return v ? v : null; }
 
 // 회장 호칭(불참 독려 서명용). 매년 바뀌므로 Script Property 'PRESIDENT_LABEL' 로 교체 가능.
-function presidentLabel_() { return getProp_('PRESIDENT_LABEL', false) || '돈일 박동용 회장'; }
+function presidentLabel_() { return getProp_('PRESIDENT_LABEL', false) || CLUB.presidentLabel; }
 // 회장 식별용 성명(매칭값과 비교). Script Property 'PRESIDENT_NAME' 로 교체 가능.
-function presidentName_() { return getProp_('PRESIDENT_NAME', false) || '박동용'; }
+function presidentName_() { return getProp_('PRESIDENT_NAME', false) || CLUB.presidentName; }
 // 직전회장 성명(공손한 예우 환영용). Script Property 'IPP_NAME' 로 교체 가능.
-function immediatePastPresidentName_() { return getProp_('IPP_NAME', false) || '윤용택'; }
+function immediatePastPresidentName_() { return getProp_('IPP_NAME', false) || CLUB.ippName; }
 
-// 역대 회장(성명 → 직책). 참석 시 예우 호칭에 사용. 회기마다 추가.
-var PAST_PRESIDENTS = {
-  '김종만': '초대·2대 회장',
-  '홍계영': '3대회장',
-  '김영상': '4대회장',
-  '송건호': '5대회장',
-  '이영준': '6대회장',
-  '이영희': '7대회장',
-  '윤용택': '8대/직전회장'
-};
+// 역대 회장 표(PAST_PRESIDENTS)·현 직책 표(CLUB_ROLES)·보조 명칭(SUB_TITLES)은 Club.js
 function pastPresidentTitle_(name) { return PAST_PRESIDENTS[name] || null; }
 
-// 현 직책(성명 → 직책). 명칭 앞에 붙는다. 회기마다 갱신. (예: 출석위원장 동우 김종만)
-var CLUB_ROLES = {
-  '박동용': '클럽 회장',
-  '서상일': '차기회장',
-  '황준영': '부회장',
-  '이준원': '총무이사',
-  '김태훈': '사찰이사',
-  '김종만': '출석위원장',
-  '김영상': '재무이사',
-  '이영희': 'IT위원장',
-  '윤성묵': 'DEI위원장',
-  '권준철': '멤버십위원장',
-  '이영준': '클럽관리위원장',
-  '송선호': '로타리재단위원장',
-  '김태수': '봉사프로젝트위원장',
-  '윤용택': '공공이미지위원장(클럽감사)'
-  // … 나머지 직책은 추가 예정
-};
 function clubRole_(name) { return CLUB_ROLES[name] || null; }
 
-// 괄호 안 보조 명칭(성명 → 동호회장 등). 역대회장과 함께 subTitle_ 로 묶임.
-var SUB_TITLES = {
-  '서상일': '골프회장',
-  '김현태': '골프 부회장',
-  '이경환': '골프 총무',
-  '황준영': '문화레저동호회 회장'
-};
 // 괄호에 넣을 보조 명칭: 동호회장 우선, 없으면 역대회장.
 function subTitle_(name) { return SUB_TITLES[name] || pastPresidentTitle_(name) || null; }
 
@@ -169,9 +116,9 @@ function subTitle_(name) { return SUB_TITLES[name] || pastPresidentTitle_(name) 
 // 참석 명단은 늦게 눌러도 항상 이 순서로 상단 고정:
 // 회장→차기회장→부회장→총무→재무→사찰→공공이미지→멤버십→클럽관리→로타리재단→봉사프로젝트→IT→DEI→출석위원장→일반(누른순서).
 var ATTEND_ROLE_RANK = {
-  '클럽 회장': 1, '차기회장': 2, '부회장': 3,
+  '클럽 회장': 1, '회장': 1, '차기회장': 2, '부회장': 3,
   '총무이사': 4, '재무이사': 5, '사찰이사': 6,
-  '공공이미지위원장': 7, '멤버십위원장': 8, '클럽관리위원장': 9,
+  '공공이미지위원장': 7, '멤버십위원장': 8, '회원위원장': 8, '클럽관리위원장': 9,
   '로타리재단위원장': 10, '봉사프로젝트위원장': 11, 'IT위원장': 12, 'DEI위원장': 13,
   '출석위원장': 14   // 임원 중 제일 아래(일반 회원 바로 위)
 };
@@ -184,9 +131,9 @@ function attendRank_(name) {
 }
 // 직책별 장식 이모지
 var ROLE_BADGE = {
-  '클럽 회장': '👑', '차기회장': '🌟', '부회장': '🎖️',
+  '클럽 회장': '👑', '회장': '👑', '차기회장': '🌟', '부회장': '🎖️',
   '총무이사': '📋', '재무이사': '💰', '사찰이사': '⚖️',
-  '공공이미지위원장': '📢', '멤버십위원장': '🤝', '클럽관리위원장': '🏛️',
+  '공공이미지위원장': '📢', '멤버십위원장': '🤝', '회원위원장': '🤝', '클럽관리위원장': '🏛️',
   '로타리재단위원장': '💝', '봉사프로젝트위원장': '🛠️', 'IT위원장': '💻',
   'DEI위원장': '🌈', '출석위원장': '📅'
 };
@@ -198,20 +145,10 @@ function attendLabel_(aho, name) {
   return role ? base + ' — ' + roleBadge_(role) + ' ' + role : base;
 }
 
-// ── 회비: 직책별 분담금(만원). 0=분담금 없음 ─────────────────
-var DIRECTOR_SHARE_ROLES = {
-  '총무이사': 1, '재무이사': 1, '사찰이사': 1,          // 이사 3
-  '공공이미지위원장': 1, '로타리재단위원장': 1, '봉사프로젝트위원장': 1,
-  'IT위원장': 1, 'DEI위원장': 1, '클럽관리위원장': 1, '멤버십위원장': 1  // 상임위원장 이사진 7
-  // ※ 출석위원장은 상임 이사진 아님 → 분담금 없음
-};
+// ── 회비: 직책별 분담금(만원). 표(SHARE_BY_ROLE)는 Club.js, 표에 없으면 0 ──
 function shareByRole_(role) {
   if (!role) return 0;
-  var r = roleKey_(role);
-  if (r === '클럽 회장') return 300;
-  if (r === '차기회장') return 200;
-  if (r === '부회장') return 100;
-  return DIRECTOR_SHARE_ROLES[r] ? 50 : 0;
+  return SHARE_BY_ROLE[roleKey_(role)] || 0;
 }
 
 function getAdminIds_() {

@@ -10,8 +10,9 @@
 var DUES_SHEET = '회비대장';
 var DUES_HEADERS = ['아호', '성명', '유형', '직책', '가입월', 'PHF', '연회비', '의무봉사금', '주회비', 'RFSM', '분담금', '봉사의연금', '부과합계', '납부액', '미납'];
 
-var DUES_ANNUAL = 700000, DUES_SERVICE = 300000, DUES_WEEKLY = 120000, DUES_NEWSEED = 300000;
-var RFSM_USD = 100, FISCAL_START = 7;   // 회기 시작월(7월)
+// 금액은 Club.js 의 CLUB.dues (클럽마다 다름)
+var DUES_ANNUAL = CLUB.dues.annual, DUES_SERVICE = CLUB.dues.service, DUES_WEEKLY = CLUB.dues.weekly, DUES_NEWSEED = CLUB.dues.newSeed;
+var RFSM_USD = CLUB.dues.rfsmUsd, FISCAL_START = CLUB.dues.fiscalStart;   // 회기 시작월(7월)
 
 function getDuesRate_() { return parseInt(getProp_('USD_KRW', false) || '1540', 10) || 1540; }
 function setDuesRate_(v) { props_().setProperty('USD_KRW', String(v)); }

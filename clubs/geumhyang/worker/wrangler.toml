@@ -1,0 +1,6 @@
+# Cloudflare Worker — 대구금향RC 텔레그램 웹훅 프록시
+# 비밀값(GAS_URL, TG_SECRET)은 여기 쓰지 않는다 → tools/worker-deploy.ps1 이 wrangler secret 으로 넣는다.
+name = "geumhyang-bot"
+main = "../../../cloudflare-worker-v2.js"
+compatibility_date = "2026-09-01"
+workers_dev = true

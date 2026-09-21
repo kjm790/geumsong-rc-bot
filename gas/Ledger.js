@@ -46,7 +46,7 @@ function ledgerEntry_(chat, from, text, type) {
   var parts = text.trim().split(/\s+/);   // /수입 분류 금액 [적요...]
   if (parts.length < 3) {
     tgSend_(chat.id, '사용법: <b>/' + type + ' 분류 금액 [적요]</b>\n예) ' +
-      (type === '수입' ? '/수입 기부 100만 박동용 회장' : '/지출 봉사활동비 350000 자유재활원 물품'));
+      (type === '수입' ? CLUB.ledgerExamples.income : CLUB.ledgerExamples.expense));
     return;
   }
   var category = parts[1];

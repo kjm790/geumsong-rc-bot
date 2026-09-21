@@ -32,7 +32,10 @@ function tgAnswerCallback_(callbackId, text, showAlert) {
 // ── 웹훅 관리 (배포 후 수동 실행) ─────────────────────────────
 function setWebhook() {
   var url = getProp_('WEBHOOK_URL', true);
-  var res = tgApi_('setWebhook', { url: url, allowed_updates: ['message', 'callback_query'] });
+  var payload = { url: url, allowed_updates: ['message', 'callback_query'] };
+  var secret = getProp_('WEBHOOK_SECRET', false);
+  if (secret) payload.secret_token = secret;   // 텔레그램이 매 요청 헤더에 실어 보냄 → Worker 가 검증
+  var res = tgApi_('setWebhook', payload);
   Logger.log('setWebhook → ' + JSON.stringify(res));
   return res;
 }

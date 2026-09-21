@@ -76,7 +76,7 @@ function cmdSettlement_(chat, from) {
   var range = fiscalRange_(todayStr_());
   var act = fiscalActuals_(range);
   var budgets = budgetRows_();
-  var L = ['📑 <b>대구금송RC 예산 대비 결산</b>', UI_LINE, '🗓 ' + range.label + ' 회기 (' + range.start + '~' + range.end + ')', ''];
+  var L = ['📑 <b>' + CLUB.short + ' 예산 대비 결산</b>', UI_LINE, '🗓 ' + range.label + ' 회기 (' + range.start + '~' + range.end + ')', ''];
   var budInc = 0, budExp = 0;
   ['수입', '지출'].forEach(function (type) {
     var actMap = type === '수입' ? act.inc : act.exp;
