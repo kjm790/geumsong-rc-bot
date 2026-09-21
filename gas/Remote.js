@@ -67,3 +67,37 @@ function remoteTail_(sheetName, headers, n) {
 }
 function remoteErrors(n) { return remoteTail_(ERRORS_SHEET, ERRORS_HEADERS, n); }
 function remoteLog(n) { return remoteTail_(AUDIT_SHEET, AUDIT_HEADERS, n); }
+
+/**
+ * 명단 시트의 한 열을 이름 기준으로 채운다(열이 없으면 afterTitle 열 바로 뒤에 새로 만든다).
+ *  - pairs: [[성명, 값], …]. 값은 문자로 저장(회원번호가 12,735,853 처럼 바뀌지 않게).
+ *  - 이미 다른 값이 들어 있는 칸은 덮어쓰지 않고 conflict 로 돌려준다. 같은 이름이 여러 명이면 건너뛴다.
+ *  - 로그에는 '누구의 어느 열을 기재했다'만 남기고 값은 남기지 않는다.
+ */
+function remoteRosterFill(colTitle, pairs, afterTitle) {
+  var id = getProp_('RECRUIT_SHEET_ID', true), ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var lay = recruitAhoLayout_(sh.getDataRange().getValues()), head = sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(norm);
+  var col = head.indexOf(norm(colTitle)) + 1, created = false;
+  if (!col) {
+    var after = head.indexOf(norm(afterTitle || '성명')) + 1;
+    if (!after) throw new Error('기준 열을 찾지 못했습니다: ' + (afterTitle || '성명'));
+    sh.insertColumnAfter(after); col = after + 1; created = true;
+    sh.getRange(lay.headerRow, col).setValue(colTitle);
+    try { sh.setColumnWidth(col, 90); } catch (e) {}
+  }
+  var values = sh.getDataRange().getValues(), out = { column: colTitle, created: created, written: [], same: [], conflict: [], notFound: [], ambiguous: [] };
+  pairs.forEach(function (pr) {
+    var plan = recruitStatusPlan_(values, [pr[0]], '(이름 찾기 전용)');       // 상태 비교는 항상 '다름' → changes 에 행 위치가 담긴다
+    if (plan.notFound.length) { out.notFound.push(pr[0]); return; }
+    if (plan.ambiguous.length) { out.ambiguous.push(pr[0]); return; }
+    var row = plan.changes[0].row, cur = values[row - 1][col - 1], before = String(cur === null || cur === undefined ? '' : cur).trim(), v = String(pr[1]).trim();
+    if (before === v) { out.same.push(pr[0]); return; }
+    if (before) { out.conflict.push(pr[0]); return; }
+    sh.getRange(row, col).setNumberFormat('@').setValue(v);
+    try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, colTitle + ' 기재', pr[0] + ' (' + row + '행)', '', '(기재)', 'clasp run'); } catch (e) {}
+    out.written.push(pr[0]);
+  });
+  SpreadsheetApp.flush();
+  return out;
+}
