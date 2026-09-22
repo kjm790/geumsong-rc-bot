@@ -268,6 +268,54 @@ function remoteIntroAlbum(chatId) {
   return { members: rows.length, groups: sentGroups, noPhoto: noPhoto };
 }
 
+/**
+ * 회원 소개를 한 사람씩(사진 1장 + 소개 캡션) 방에 올린다. 임원단 → 회원 순. 사진 없는 회원은 글로만.
+ * 보낸 메시지 ID는 Script Property INTRO_MSGS_<chat> 에 저장해 다음 게시 때 지울 수 있게 한다.
+ * roomTypes: ['회장단','임원'] 등. 반환: 방별 보낸 수
+ */
+function remoteIntroSolo(roomTypes) {
+  var rooms = rooms_().filter(function (r) { return (roomTypes || ['회장단']).indexOf(r.type) !== -1; });
+  if (!rooms.length) return { error: '해당 방 없음' };
+  var sub = function (p, n) { var it = p.getFoldersByName(n); if (!it.hasNext()) throw new Error('폴더 없음: ' + n); return it.next(); };
+  var photos = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '회원사진');
+  var files = {}, it = photos.getFiles();
+  while (it.hasNext()) { var f = it.next(); files[f.getName().replace(/\.[A-Za-z0-9]+$/, '').replace(/\s+/g, '')] = f; }
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var subs = recruitSubTitles_(), rows = recruitParse_(sh.getDataRange().getValues()).rows.filter(function (m) { return m.status === '확약'; })
+    .sort(function (a, b) { return recruitRoleRank_(a.role) - recruitRoleRank_(b.role) || a.row - b.row; });
+  var blobs = {}; rows.forEach(function (m) { if (files[m.name]) blobs[m.name] = files[m.name].getBlob(); });
+  var out = {};
+  rooms.forEach(function (r) {
+    remoteIntroClear_(r.chatId);
+    var ids = [], head = tgSend_(r.chatId, '👥 <b>' + CLUB.short + ' 창립회원 소개</b> · 확약 ' + rows.length + '명\n' + UI_LINE + '\n임원단부터 차례로 소개합니다.');
+    if (head && head.ok) ids.push(head.result.message_id);
+    rows.forEach(function (m) {
+      var title = m.role ? roleBadge_(m.role) + ' ' : '🙂 ', line2 = m.role ? m.role + (subs[m.name] ? ' · ' + subs[m.name] : '') : (subs[m.name] || '회원');
+      var cap = title + '<b>' + escapeHtml_(recruitLabel_(m)) + '</b>\n' + escapeHtml_(line2) + (m.job ? '\n' + escapeHtml_(m.job) + (m.company ? ' (' + escapeHtml_(m.company) + ')' : '') : '');
+      var res;
+      if (blobs[m.name]) {
+        var raw = UrlFetchApp.fetch('https://api.telegram.org/bot' + getToken_() + '/sendPhoto', { method: 'post', payload: { chat_id: r.chatId, caption: cap, parse_mode: 'HTML', photo: blobs[m.name].setName(m.name + '.jpg') }, muteHttpExceptions: true });
+        res = JSON.parse(raw.getContentText());
+      } else res = tgSend_(r.chatId, '📷 (사진 준비 중)\n' + cap);
+      if (res && res.ok) ids.push(res.result.message_id);
+    });
+    props_().setProperty('INTRO_MSGS_' + r.chatId, JSON.stringify(ids));
+    out[r.name] = ids.length;
+  });
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '회원 소개(개별) 게시', Object.keys(out).join(', '), '', rows.length + '명', 'clasp run'); } catch (e) {}
+  return out;
+}
+/** 이전에 올린 소개 메시지 삭제(ID 를 저장해 둔 것만) */
+function remoteIntroClear_(chatId) {
+  var raw = props_().getProperty('INTRO_MSGS_' + chatId); if (!raw) return 0;
+  var n = 0; JSON.parse(raw).forEach(function (id) { var r = tgApi_('deleteMessage', { chat_id: chatId, message_id: id }); if (r && r.ok) n++; });
+  props_().deleteProperty('INTRO_MSGS_' + chatId); return n;
+}
+/** 방의 특정 메시지 ID 들을 삭제(앨범처럼 ID 를 저장 못 한 경우). ids: [번호…] */
+function remoteDeleteMessages(chatId, ids) {
+  return ids.map(function (id) { var r = tgApi_('deleteMessage', { chat_id: chatId, message_id: id }); return { id: id, ok: !!(r && r.ok), err: r && r.description }; });
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
