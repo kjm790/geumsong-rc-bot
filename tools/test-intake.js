@@ -63,6 +63,7 @@ assert.ok(line.indexOf('동명이인') !== -1 && line.indexOf('이메일 ✓') !
 // 라우터: 등록된 임원만 기재, 참관·미등록은 무시
 var users = [{ userId: '222', name: '가회장', title: '회장', role: '회장', active: true }, { userId: '555', name: '라참관', title: '', role: '참관', active: true }];
 ctx.authUsers_ = function () { return users; };
+ctx.CacheService = { getScriptCache: function () { return { get: function () { return null; }, put: function () {}, remove: function () {} }; } };
 ctx.rooms_ = function () { return [{ chatId: '1', name: '회장단방', type: '회장단' }, { chatId: '2', name: '임원방', type: '임원' }]; };
 var got = []; ctx.intakeHandle_ = function (c, u, t) { got.push(u.name); };
 var say = function (uid, text) { ctx.officeHandleMessage_({ chat: { id: 1, type: 'group' }, from: { id: uid }, text: text }); };

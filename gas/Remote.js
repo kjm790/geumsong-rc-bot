@@ -14,7 +14,7 @@
 
 // 시트를 바꾸지 않는 명령 — remoteSimulate 가 기본으로 허용하는 범위
 var REMOTE_READONLY_CMDS = ['/help', '/도움말', '/start', '/id', '/whoami', '/내권한', '/recruit', '/모집현황', '/recruitlist', '/모집명단',
-  '/recruitcheck', '/모집점검', '/log', '/로그', '/rooms', '/방목록', '/form', '/양식', '/save', '/보관', '/guide', '/사용법', '/안내', '/prep', '/준비', '/edu', '/교육', '/schedule', '/일정'];
+  '/recruitcheck', '/모집점검', '/log', '/로그', '/rooms', '/방목록', '/form', '/양식', '/save', '/보관', '/guide', '/사용법', '/안내', '/prep', '/준비', '/edu', '/교육', '/이수현황', '/edu', '/교육', '/schedule', '/일정'];
 
 /**
  * 가상 실행: 텔레그램 업데이트를 실제 시트를 상대로 처리하되, **텔레그램으로는 아무것도 보내지 않고** 봇이 보냈을 내용을 돌려준다.

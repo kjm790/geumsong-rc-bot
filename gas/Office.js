@@ -11,7 +11,7 @@ function officeMode_() { return typeof CLUB !== 'undefined' && !!CLUB.accessCont
 // 기획서의 탭 구조(설정·회원·로그는 각 모듈에 정의)
 var OFFICE_TABS = [
   ['임원', ['직책', '구분', '성명', '상태', '비고']],
-  ['교육과정', ['회차', '주제', '영상링크', '확인질문', '정답기준', '게시예정일', '게시시각']],
+  ['교육과정', ['회차', '주제', '영상링크', '확인질문', '정답기준', '게시예정일', '게시시각', '대상', '보조영상']],
   ['교육이수', ['시각', '회차', 'user_id', '성명', '응답', '판정']],
   ['일정', ['날짜', '시간', '구분', '제목', '장소', '알림(며칠 전, 쉼표)', '비고']],
   ['회비청구', ['청구ID', '회기', '분납차수', '성명', '항목', '금액', '납기', '상태', '적용환율', '생성시각', '정정대상']],
@@ -47,7 +47,7 @@ var OFFICE_COMMANDS = [
   { n: ['/pending', '/검토중'], cap: 'roster.add', feat: 'intake', run: function (c) { recruitSetStatusReply_(c.chat, c.user, c.text, '검토중'); } },
   { n: ['/hold', '/보류'], cap: 'roster.add', feat: 'intake', run: function (c) { recruitSetStatusReply_(c.chat, c.user, c.text, '보류'); } },
   { n: ['/recruitlist', '/모집명단'], cap: 'view', feat: 'recruit.names', help: '예비회원 명단(상태별 이름)', run: function (c) { recruitReply_(c.chat, 'list'); } },
-  { n: ['/edu', '/교육', '/이수현황'], cap: 'view', feat: 'edu', help: '교육 (1단계 · 준비 중)', run: function (c) { officeNotYet_(c.chat, 1, '교육'); } },
+  { n: ['/edu', '/교육', '/이수현황'], cap: 'view', feat: 'edu', help: '교육 이수 현황 (/edu list 회차 목록 · 관리자: /edu post 번호 게시)', run: function (c) { eduReply_(c); } },
   { n: ['/schedule', '/일정'], cap: 'view', feat: 'schedule', help: '일정 (2단계 · 준비 중)', run: function (c) { officeNotYet_(c.chat, 2, '일정 알림'); } },
   { n: ['/회비현황', '/미납', '/지출기안', '/승인대기'], cap: 'finance.view', feat: 'finance', help: '회비·지출 (3단계 · 준비 중)', run: function (c) { officeNotYet_(c.chat, 3, '회비·지출'); } },
   { n: ['/월보고'], cap: 'finance.view', feat: 'finance.report', run: function (c) { officeNotYet_(c.chat, 3, '월 보고'); } },
@@ -82,15 +82,17 @@ function officeHandleMessage_(msg) {
   if (!text) return;
   var isCmd = text.charAt(0) === '/', cmd = isCmd ? text.split(/\s+/)[0].split('@')[0].toLowerCase() : '';
   if (cmd === '/id') { officeCmdId_(chat, from); return; }  // 예외: 등록에 필요한 본인 id 확인은 누구나
-  if (!isCmd && !intakeLooksLikeForm_(text)) return;        // 일반 대화 — 시트를 읽지 않고 바로 끝(자유 질문은 1단계 교육 모듈에서 연결)
+  if (!isCmd && !intakeLooksLikeForm_(text) && chat.type !== 'private') return;   // 그룹의 일반 대화 — 시트를 읽지 않고 바로 끝
 
   var user = authUser_(from.id);
   if (!user) return;                                        // 미등록 user_id → 무시
   var rooms = []; try { rooms = rooms_(); } catch (e) { Logger.log('방 탭 읽기 실패: ' + e); }
   var c = { msg: msg, chat: chat, from: from, user: user, text: text };
 
-  if (!isCmd) {                                             // 예비회원 추천 양식 글 → 명단 자동 기재(접수 기능이 열린 방·1:1 에서만)
-    if (can_(user, 'roster.add') && roomAllows_(rooms, chat, 'intake')) intakeHandle_(chat, user, text);
+  if (!isCmd) {
+    if (eduMaybeAnswer_(chat, user, text)) return;         // 개인 대화창에서 교육 확인질문에 답하는 중이면 그 답으로 기록
+    if (!intakeLooksLikeForm_(text)) return;
+    if (can_(user, 'roster.add') && roomAllows_(rooms, chat, 'intake')) intakeHandle_(chat, user, text);   // 예비회원 추천 양식 → 명단 기재
     return;
   }
   if (cmd === '/setroom' || cmd === '/방등록') { if (requireCap_(chat, user, '*')) officeCmdSetRoom_(chat, user, text); return; }
@@ -123,6 +125,7 @@ function officeHandleCallback_(cq) {
     return;
   }
   if ((m = /^doc\|([A-Za-z0-9]+)\|(\d+|x)$/.exec(data))) { docsHandleCallback_(cq, user, chat, m[1], m[2]); return; }
+  if ((m = /^edu\|([asv])\|(\d+)(?:\|(ok|again))?$/.exec(data))) { eduHandleCallback_(cq, user, m); return; }
   if ((m = /^(aho|st)\|([^|]+)\|(.+)$/.exec(data))) {        // 이름 오타 제안 버튼: 명단을 고칠 수 있는 사람이, 접수가 열린 방·1:1 에서만
     var rooms = []; try { rooms = rooms_(); } catch (e) {}
     if (!can_(user, 'roster.add') || !roomAllows_(rooms, chat, 'intake')) { tgAnswerCallback_(cq.id, '이 버튼을 누를 권한이 없습니다.', true); return; }
@@ -191,6 +194,7 @@ function officeCmdLog_(chat) {
 function officeDaily_() {
   try { postWeeklyRecruitIfDue_(); } catch (e) { Logger.log('모집 현황 보고 실패: ' + e); }
   try { prepDailyIfDue_(); } catch (e) { Logger.log('준비 알림 실패: ' + e); }
+  try { eduDailyIfDue_(); } catch (e) { Logger.log('교육 게시 실패: ' + e); }
   // 2단계: 일정 D-day 알림 / 3단계: 납기 알림·월 보고 — 모듈 추가 시 여기에 연결
 }
 
@@ -296,7 +300,7 @@ function installAll() {
 
 function setOfficeCommands() {
   return tgApi_('setMyCommands', { commands: [
-    { command: 'help', description: '도움말' }, { command: 'save', description: '파일 보관 방법(드라이브 자동 저장)' }, { command: 'form', description: '예비회원 추천 양식' }, { command: 'prep', description: '창립행사 준비 현황' }, { command: 'done', description: '준비 항목 완료 표시: /done 번호' }, { command: 'recruit', description: '창립회원 모집 현황' },
+    { command: 'help', description: '도움말' }, { command: 'save', description: '파일 보관 방법(드라이브 자동 저장)' }, { command: 'form', description: '예비회원 추천 양식' }, { command: 'edu', description: '교육 이수 현황' }, { command: 'prep', description: '창립행사 준비 현황' }, { command: 'done', description: '준비 항목 완료 표시: /done 번호' }, { command: 'recruit', description: '창립회원 모집 현황' },
     { command: 'recruitlist', description: '예비회원 명단(상태별)' }, { command: 'guide', description: '이 방 사용 설명서' }, { command: 'whoami', description: '내 등록 정보' }, { command: 'setroom', description: '(관리자) 이 방 등록: 회장단·임원·동호회' },
     { command: 'id', description: '대화방·본인 ID' }
   ] });
