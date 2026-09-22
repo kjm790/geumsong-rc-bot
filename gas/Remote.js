@@ -231,6 +231,43 @@ function remoteRosterHeaderReplace(oldText, newText) {
   return out;
 }
 
+/**
+ * 회원 소개 앨범을 방에 게시: 명단(확약)을 임원 서열순으로, 사진 폴더의 원본 사진을 텔레그램 앨범(10장 묶음)으로 보낸다.
+ * 캡션 = 아호 성명 · 직책(동호회장) · 직업분류. 연락처·생년 등은 넣지 않는다. 사진 없는 회원은 마지막에 글로 안내.
+ * chatId 생략 시 회장단 방. 반환: 보낸 묶음 수·사진 없는 사람
+ */
+function remoteIntroAlbum(chatId) {
+  var rooms = rooms_(), target = chatId || (rooms.filter(function (r) { return r.type === '회장단'; })[0] || {}).chatId;
+  if (!target) return { error: '회장단 방이 없습니다.' };
+  var sub = function (p, n) { var it = p.getFoldersByName(n); if (!it.hasNext()) throw new Error('폴더 없음: ' + n); return it.next(); };
+  var photos = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '회원사진');
+  var files = {}, it = photos.getFiles();
+  while (it.hasNext()) { var f = it.next(); files[f.getName().replace(/\.[A-Za-z0-9]+$/, '').replace(/\s+/g, '')] = f; }
+  var subs = recruitSubTitles_(), rows = recruitParse_((function () { var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)); return (ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0]).getDataRange().getValues(); })()).rows
+    .filter(function (m) { return m.status === '확약'; })
+    .sort(function (a, b) { return recruitRoleRank_(a.role) - recruitRoleRank_(b.role) || a.row - b.row; });
+  var media = [], blobs = [], noPhoto = [];
+  rows.forEach(function (m, i) {
+    var f = files[m.name];
+    if (!f) { noPhoto.push(recruitLabel_(m)); return; }
+    var cap = (i + 1) + '. ' + recruitLabel_(m) + (m.role ? ' — ' + m.role + (subs[m.name] ? '(' + subs[m.name] + ')' : '') : (subs[m.name] ? ' — ' + subs[m.name] : '')) + (m.job ? '\n' + m.job : '');
+    var key = 'p' + blobs.length;
+    blobs.push({ key: key, blob: f.getBlob().setName(key + '.jpg') });
+    media.push({ type: 'photo', media: 'attach://' + key, caption: cap });
+  });
+  tgSend_(target, '👥 <b>' + CLUB.short + ' 창립회원 소개</b> — 확약 ' + rows.length + '명 (임원 서열순)\n' + UI_LINE);
+  var sentGroups = 0;
+  for (var s = 0; s < media.length; s += 10) {
+    var chunk = media.slice(s, s + 10), payload = { chat_id: target, media: JSON.stringify(chunk) };
+    blobs.slice(s, s + 10).forEach(function (b) { payload[b.key] = b.blob; });
+    var res = UrlFetchApp.fetch('https://api.telegram.org/bot' + getToken_() + '/sendMediaGroup', { method: 'post', payload: payload, muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) sentGroups++; else return { error: 'sendMediaGroup ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200), sentGroups: sentGroups };
+  }
+  if (noPhoto.length) tgSend_(target, '📷 사진 준비 중: ' + noPhoto.map(escapeHtml_).join(', '));
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '회원 소개 앨범 게시', String(target), '', rows.length + '명 · ' + sentGroups + '묶음', 'clasp run'); } catch (e) {}
+  return { members: rows.length, groups: sentGroups, noPhoto: noPhoto };
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
