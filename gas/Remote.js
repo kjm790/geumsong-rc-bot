@@ -214,6 +214,23 @@ function remoteRenameRole(oldTitle, newTitle) {
   return out;
 }
 
+/** 명단 탭 제목 줄 위쪽(요약 영역)의 수식·글자에서 old → new 로 바꾼다. 회원 줄은 건드리지 않는다. 반환: 바뀐 칸과 전후 */
+function remoteRosterHeaderReplace(oldText, newText) {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var lay = recruitAhoLayout_(sh.getDataRange().getValues()), rng = sh.getRange(1, 1, lay.headerRow - 1, sh.getLastColumn());
+  var f = rng.getFormulas(), v = rng.getValues(), out = [];
+  for (var r = 0; r < f.length; r++) for (var c = 0; c < f[r].length; c++) {
+    var cur = f[r][c] || (typeof v[r][c] === 'string' ? v[r][c] : '');
+    if (!cur || cur.indexOf(oldText) === -1) continue;
+    var next = cur.split(oldText).join(newText);
+    sh.getRange(r + 1, c + 1).setFormula(f[r][c] ? next : null) ; if (!f[r][c]) sh.getRange(r + 1, c + 1).setValue(next);
+    out.push({ cell: sh.getRange(r + 1, c + 1).getA1Notation(), before: cur, after: next });
+  }
+  SpreadsheetApp.flush();
+  if (out.length) { try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '명단 요약 수식 변경', out.map(function (x) { return x.cell; }).join(','), oldText, newText, 'clasp run'); } catch (e) {} }
+  return out;
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
