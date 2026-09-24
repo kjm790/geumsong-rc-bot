@@ -316,6 +316,202 @@ function remoteDeleteMessages(chatId, ids) {
   return ids.map(function (id) { var r = tgApi_('deleteMessage', { chat_id: chatId, message_id: id }); return { id: id, ok: !!(r && r.ok), err: r && r.description }; });
 }
 
+/** 「창립회기 임원」 탭의 수식·값을 읽어 온다(구조 파악용) */
+function remoteBoardInspect() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  if (!sh) return { error: '임원 탭 없음' };
+  var rng = sh.getDataRange(), f = rng.getFormulas(), v = rng.getValues(), out = [];
+  for (var r = 0; r < v.length; r++) out.push(v[r].map(function (c, i) { return f[r][i] || (c === '' ? '' : String(c)); }));
+  return { tab: sh.getName(), rows: out, validation: sh.getRange(5, 1).getDataValidation() ? 'has' : 'none' };
+}
+
+/**
+ * 「창립회기 임원」 탭 보강:
+ *  - 성명 옆에 「사진」 열(셀 이미지)을 만들고 회원 사진 썸네일을 넣는다. 성명이 바뀌면 다시 실행하면 갱신.
+ *  - 차기회장 줄: 창립 회기엔 초대회장 겸임 → 성명 칸에 값(수식 대신)으로 기재, 상태 '겸임'.
+ *  - 표 아래에 동호회 줄(골프회 회장·골프회 총무·문화레저동호회 회장)을 추가하고 봇 설정값(아호 성명)으로 채운다. 이미 있으면 갱신.
+ */
+function remoteBoardDecorate() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  if (!sh) return { error: '임원 탭 없음' };
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var v = sh.getDataRange().getValues(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (norm(v[r][0]) === '직책') hr = r;
+  if (hr === -1) return { error: "'직책' 제목 줄 없음" };
+  var head = v[hr].map(norm), nameCol = head.indexOf('성명') + 1, out = { photos: [], noPhoto: [], added: [], updated: [] };
+  var photoCol = head.indexOf('사진') + 1;
+  if (!photoCol) { sh.insertColumnAfter(nameCol); photoCol = nameCol + 1; sh.getRange(hr + 1, photoCol).setValue('사진'); try { sh.setColumnWidth(photoCol, 72); } catch (e) {} }
+
+  // 표 범위: 제목 줄 다음부터 직책 칸이 비는 곳까지
+  var last = hr + 1; while (last < v.length && norm(v[last][0])) last++;
+  var roleRows = {}; for (var i = hr + 1; i < last; i++) roleRows[norm(v[i][0])] = i + 1;
+
+  // 차기회장 = 초대회장 겸임(값으로)
+  var pres = String(sh.getRange(roleRows['회장'], nameCol).getValue() || '').trim();
+  if (roleRows['차기회장'] && pres) {
+    var rr = roleRows['차기회장'], stCol = head.indexOf('상태') + 1, jobCol = head.indexOf('직업분류') + 1, okCol = head.indexOf('확약여부') + 1;
+    sh.getRange(rr, nameCol).setValue(pres);
+    if (jobCol) sh.getRange(rr, jobCol).setFormula(sh.getRange(roleRows['회장'], jobCol).getFormula() || '');
+    if (okCol) sh.getRange(rr, okCol).setValue('확약');
+    if (stCol) sh.getRange(rr, stCol).setValue('초대회장 겸임');
+    out.updated.push('차기회장 ← ' + pres + ' (겸임)');
+  }
+
+  // 동호회 줄(표 바로 아래, '내정 N / 미정 M' 집계 줄 위가 아니라 표 끝에 이어 붙임)
+  var clubs = [['골프회 회장', '동호회', recruitNameOf_(setting_('골프회_회장', ''))], ['골프회 총무', '동호회', recruitNameOf_(setting_('골프회_총무', ''))], ['문화레저동호회 회장', '동호회', recruitNameOf_(setting_('문화레저동호회_회장', ''))]];
+  var insertAt = last + 1;                                  // 1-based row of first empty line after the table
+  clubs.forEach(function (c) {
+    var row = roleRows[norm(c[0])];
+    if (!row) { sh.insertRowBefore(insertAt); row = insertAt; insertAt++; sh.getRange(row, 1, 1, 2).setValues([[c[0], c[1]]]); out.added.push(c[0]); }
+    var nm = c[2] || '', full = String(setting_(c[0] === '골프회 회장' ? '골프회_회장' : c[0] === '골프회 총무' ? '골프회_총무' : '문화레저동호회_회장', '')).trim();
+    var ahoC = head.indexOf('아호') + 1;                 // 아호 열이 있으면 아호·성명을 따로 적는다
+    if (ahoC) { var fp = full.split(/s+/); sh.getRange(row, nameCol).setValue(nm); sh.getRange(row, ahoC).setValue(fp.length > 1 ? fp.slice(0, -1).join(' ') : ''); }
+    else sh.getRange(row, nameCol).setValue(full || nm);
+    var jc = head.indexOf('직업분류') + 1, oc = head.indexOf('확약여부') + 1, sc = head.indexOf('상태') + 1;
+    if (nm && jc) sh.getRange(row, jc).setFormula("=IFERROR(INDEX('예비회원명단'!$H$7:$H$36,MATCH(" + sh.getRange(row, nameCol).getA1Notation() + ",'예비회원명단'!$C$7:$C$36,0)),\"\")");
+    if (oc) sh.getRange(row, oc).setValue(nm ? '확약' : '');
+    if (sc) sh.getRange(row, sc).setValue(nm ? '겸임' : '미정');
+    roleRows[norm(c[0])] = row;
+    if (out.added.indexOf(c[0]) === -1) out.updated.push(c[0] + ' ← ' + (nm || '(비움)'));
+  });
+  SpreadsheetApp.flush();
+
+  // 사진: 성명 칸 값 기준으로 썸네일 삽입
+  var sub = function (p, n) { var it = p.getFoldersByName(n); if (!it.hasNext()) throw new Error('폴더 없음: ' + n); return it.next(); };
+  var thumbs = sub(sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '회원사진'), '_썸네일(시트용)'), tf = thumbs.getFiles(), blobs = {};
+  while (tf.hasNext()) { var t = tf.next(); blobs[t.getName().replace(/\.[A-Za-z0-9]+$/, '')] = t; }
+  var v2 = sh.getDataRange().getValues();
+  for (var k = hr + 1; k < v2.length; k++) {
+    var nm2 = String(v2[k][nameCol - 1] || '').trim().split(/s+/).pop(); if (!nm2 || !norm(v2[k][0]) || /^(내정|미정)$/.test(norm(v2[k][0]))) continue;   // '아호 성명' 이면 성명만
+    var cell = sh.getRange(k + 1, photoCol);
+    if (blobs[nm2]) {
+      var b = blobs[nm2].getBlob();
+      cell.setValue(SpreadsheetApp.newCellImage().setSourceUrl('data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes())).setAltTextTitle(nm2).build());
+      cell.setHorizontalAlignment('center').setVerticalAlignment('middle'); try { sh.setRowHeight(k + 1, 72); } catch (e) {}
+      out.photos.push(nm2);
+    } else { cell.setValue(''); out.noPhoto.push(nm2); }
+  }
+  SpreadsheetApp.flush();
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '임원 탭 보강', sh.getName(), '', '사진 ' + out.photos.length + ' · 추가 ' + out.added.join(',') , 'clasp run'); } catch (e) {}
+  return out;
+}
+
+/**
+ * 「창립회기 임원」 탭 성명 칸을 '아호 성명'으로: 수식 칸은 아호(B)+성명(C)을 합치는 수식으로, 값 칸(겸임·동호회)은 명단에서 아호를 찾아 앞에 붙인다.
+ * 사진은 성명 칸이 '아호 성명'이어도 찾도록 마지막 낱말로 매칭한다(remoteBoardDecorate 재실행).
+ */
+function remoteBoardAho() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var rng = sh.getDataRange(), v = rng.getValues(), f = rng.getFormulas(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (norm(v[r][0]) === '직책') hr = r;
+  var nameCol = v[hr].map(norm).indexOf('성명'), ahoOf = {};
+  recruitParse_((ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0]).getDataRange().getValues()).rows.forEach(function (m) { ahoOf[m.name] = m.aho; });
+  var out = { formula: 0, value: 0 };
+  for (var i = hr + 1; i < v.length; i++) {
+    if (!norm(v[i][0]) || /^(내정|미정)$/.test(norm(v[i][0]))) continue;
+    var cell = sh.getRange(i + 1, nameCol + 1), fx = f[i][nameCol];
+    if (fx && /INDEX\('예비회원명단'!\$C\$7:\$C\$36,MATCH\(\$A\d+,'예비회원명단'!\$P\$7:\$P\$36,0\)\)/.test(fx) && fx.indexOf('$B$7') === -1) {
+      var m = /MATCH\((\$A\d+),/.exec(fx)[1];
+      cell.setFormula("=IFERROR(TRIM(INDEX('예비회원명단'!$B$7:$B$36,MATCH(" + m + ",'예비회원명단'!$P$7:$P$36,0))&\" \"&INDEX('예비회원명단'!$C$7:$C$36,MATCH(" + m + ",'예비회원명단'!$P$7:$P$36,0))),\"\")");
+      out.formula++;
+    } else if (!fx) {
+      var val = String(v[i][nameCol] || '').trim(), nm = val.split(/\s+/).pop();
+      if (nm && ahoOf[nm] && val.indexOf(ahoOf[nm] + ' ') !== 0) { cell.setValue(ahoOf[nm] + ' ' + nm); out.value++; }
+    }
+  }
+  SpreadsheetApp.flush();
+  return out;
+}
+
+/**
+ * 임원 탭: 「아호」 열을 성명 앞에 따로 두고, 성명 칸은 성명만 남긴다(합쳐 적지 않음).
+ *  - 수식 줄: 아호=명단 B열, 성명=명단 C열(직책으로 MATCH). 값 줄(겸임·동호회): '아호 성명'을 두 칸으로 나눔.
+ */
+function remoteBoardSplitAho() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var v = sh.getDataRange().getValues(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (norm(v[r][0]) === '직책') hr = r;
+  var head = v[hr].map(norm), nameCol = head.indexOf('성명') + 1, ahoCol = head.indexOf('아호') + 1;
+  if (!ahoCol) { sh.insertColumnBefore(nameCol); ahoCol = nameCol; nameCol++; sh.getRange(hr + 1, ahoCol).setValue('아호'); try { sh.setColumnWidth(ahoCol, 60); } catch (e) {} }
+  var rng = sh.getDataRange(), f = rng.getFormulas(), vals = rng.getValues(), out = { formula: 0, value: 0 };
+  for (var i = hr + 1; i < vals.length; i++) {
+    if (!norm(vals[i][0]) || /^(내정|미정)$/.test(norm(vals[i][0]))) continue;
+    var nf = f[i][nameCol - 1], nv = String(vals[i][nameCol - 1] || '').trim();
+    if (nf && /MATCH\((\$A\d+),'예비회원명단'!\$P/.test(nf)) {
+      var m = /MATCH\((\$A\d+),/.exec(nf)[1];
+      sh.getRange(i + 1, ahoCol).setFormula("=IFERROR(INDEX('예비회원명단'!$B$7:$B$36,MATCH(" + m + ",'예비회원명단'!$P$7:$P$36,0)),\"\")");
+      sh.getRange(i + 1, nameCol).setFormula("=IFERROR(INDEX('예비회원명단'!$C$7:$C$36,MATCH(" + m + ",'예비회원명단'!$P$7:$P$36,0)),\"\")");
+      out.formula++;
+    } else if (nv) {
+      var parts = nv.split(/\s+/), nm = parts.pop(), aho = parts.join(' ');
+      sh.getRange(i + 1, ahoCol).setValue(aho); sh.getRange(i + 1, nameCol).setValue(nm); out.value++;
+    }
+  }
+  SpreadsheetApp.flush();
+  return out;
+}
+
+/** 임원 탭에서 아호 칸이 빈 줄을 명단의 아호로 채운다(성명 기준) */
+function remoteBoardFillAho() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var v = sh.getDataRange().getValues(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (norm(v[r][0]) === '직책') hr = r;
+  var head = v[hr].map(norm), nameCol = head.indexOf('성명'), ahoCol = head.indexOf('아호'), ahoOf = {}, filled = [];
+  recruitParse_((ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0]).getDataRange().getValues()).rows.forEach(function (m) { ahoOf[m.name] = m.aho; });
+  for (var i = hr + 1; i < v.length; i++) {
+    var nm = norm(v[i][nameCol]);
+    if (!norm(v[i][0]) || /^(내정|미정)$/.test(norm(v[i][0])) || !nm || norm(v[i][ahoCol]) || !ahoOf[nm]) continue;
+    sh.getRange(i + 1, ahoCol + 1).setValue(ahoOf[nm]); filled.push(String(v[i][0]));
+  }
+  SpreadsheetApp.flush();
+  return { filled: filled };
+}
+
+/** 임원 탭의 직업분류가 빈 줄(성명이 '아호 성명'인 값 칸)을 마지막 낱말로 명단에서 찾는 수식으로 채운다 */
+function remoteBoardFixJobs() {
+  var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheets().filter(function (s) { return s.getName().indexOf('임원') !== -1; })[0];
+  var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+  var v = sh.getDataRange().getValues(), hr = -1;
+  for (var r = 0; r < v.length && hr === -1; r++) if (norm(v[r][0]) === '직책') hr = r;
+  var head = v[hr].map(norm), nameCol = head.indexOf('성명') + 1, jobCol = head.indexOf('직업분류') + 1, fixed = [];
+  for (var i = hr + 1; i < v.length; i++) {
+    if (!norm(v[i][0]) || /^(내정|미정)$/.test(norm(v[i][0])) || !norm(v[i][nameCol - 1]) || norm(v[i][jobCol - 1])) continue;
+    var a1 = sh.getRange(i + 1, nameCol).getA1Notation();
+    sh.getRange(i + 1, jobCol).setFormula("=IFERROR(INDEX('예비회원명단'!$H$7:$H$36,MATCH(" + a1 + ",'예비회원명단'!$C$7:$C$36,0)),\"\")");
+    fixed.push(String(v[i][0]));
+  }
+  SpreadsheetApp.flush();
+  return { fixed: fixed };
+}
+
+/**
+ * 명단 스프레드시트를 엑셀(xlsx)로 내려받아 방에 파일로 전송하고 드라이브 02_회원명부 폴더에도 보관.
+ * 개인정보(연락처 등)가 담긴 파일이므로 회장단 방(intake 기능)에만 보낸다.
+ */
+function remoteSendRosterXlsx(roomType) {
+  var rooms = rooms_().filter(function (r) { return r.type === (roomType || '회장단'); });
+  if (!rooms.length) return { error: '방 없음' };
+  var id = getProp_('RECRUIT_SHEET_ID', true), name = CLUB.short + '_회원명단_' + todayStr_() + '.xlsx';
+  var res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/export?mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&supportsAllDrives=true',
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return { error: 'export ' + res.getResponseCode() };
+  var blob = res.getBlob().setName(name), out = {};
+  rooms.forEach(function (r) {
+    var raw = UrlFetchApp.fetch('https://api.telegram.org/bot' + getToken_() + '/sendDocument', { method: 'post', payload: { chat_id: r.chatId, document: blob, caption: '📋 ' + CLUB.short + ' 회원명단 (예비회원명단·창립회기 임원·관리위원별 현황) — ' + todayStr_() + ' 기준' }, muteHttpExceptions: true });
+    var j = JSON.parse(raw.getContentText()); out[r.name] = j.ok ? 'sent' : (j.description || raw.getResponseCode());
+  });
+  try {
+    var sub = function (p, n) { var it = p.getFoldersByName(n); return it.hasNext() ? it.next() : p.createFolder(n); };
+    var f = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '명단 내보내기').createFile(blob);
+    out.drive = f.getUrl();
+  } catch (e) { out.driveError = String(e); }
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '회원명단 엑셀 전송', Object.keys(out).join(','), '', name, 'clasp run'); } catch (e) {}
+  return out;
+}
+
 /** 「사진」 열 점검: 회원별로 칸에 든 것이 이미지인지(IMAGE) 빈칸인지(EMPTY) 글자인지(TEXT) */
 function remoteRosterPhotoCheck() {
   var ss = SpreadsheetApp.openById(getProp_('RECRUIT_SHEET_ID', true)), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
