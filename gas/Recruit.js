@@ -77,7 +77,7 @@ function recruitNameOf_(v) { var t = String(v || '').trim().split(/\s+/); return
 function recruitSubTitles_() {
   var out = {};
   try {
-    [['골프회_회장', '골프회장'], ['문화레저동호회_회장', '문화레저동호회장']].forEach(function (k) { var n = recruitNameOf_(setting_(k[0], '')); if (n) out[n] = k[1]; });
+    [['골프회_회장', '골프회장'], ['골프회_총무', '골프회 총무'], ['문화레저동호회_회장', '문화레저동호회장']].forEach(function (k) { var n = recruitNameOf_(setting_(k[0], '')); if (n) out[n] = k[1]; });
   } catch (e) {}
   return out;
 }
