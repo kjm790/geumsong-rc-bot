@@ -28,6 +28,7 @@ assert.strictEqual(items.length, rows.length + 1, '빈 줄 제외');
 assert.ok(items[1].done && !items[0].done && items[items.length - 1].due === '2026-09-22' && items[items.length - 1].status === '대기');
 
 var today = '2026-09-24', sum = strip(ctx.prepSummaryText_(items, today, '2026-10-14'));
+assert.ok(strip(ctx.prepSummaryText_(items, today, '2026-10-14', '19:00 · 지구회관 5층')).indexOf('2026-10-14 19:00 · 지구회관 5층') !== -1, '시간·장소 표시');
 assert.ok(sum.indexOf('D-20') !== -1 && sum.indexOf('진행 1 / ' + items.length) !== -1, sum);
 assert.ok(sum.indexOf('기한 지남 2건') !== -1 && sum.indexOf('1 창립총회 일시') !== -1 && sum.indexOf('1일 지남') !== -1 && sum.indexOf('99 직접 추가한 항목') !== -1, '기한 지난 1번(9/23)·99번(9/22)');
 assert.ok(sum.indexOf('이번 주 기한 3건') !== -1 && sum.indexOf('09-30 (D-6)') !== -1, '7일 안 기한: 9/26 내빈 명단, 9/30 세칙·인선 — 완료한 2번은 제외됨? ' + sum);

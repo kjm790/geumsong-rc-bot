@@ -67,13 +67,13 @@ function prepLine_(it, today) {
 }
 
 /** 요약(순수): 진행률 + 기한 지남 + 곧 기한(7일) + 다음 할 일 */
-function prepSummaryText_(items, today, charter) {
+function prepSummaryText_(items, today, charter, where) {
   var done = items.filter(function (x) { return x.done; }).length, open = items.filter(function (x) { return !x.done; });
   var byDue = function (a, b) { return (a.due || '9999') < (b.due || '9999') ? -1 : (a.due || '9999') > (b.due || '9999') ? 1 : 0; };
   var late = open.filter(function (x) { return x.due && x.due < today; }).sort(byDue);
   var soon = open.filter(function (x) { return x.due && x.due >= today && recruitDayDiff_(today, x.due) <= 7; }).sort(byDue);
   var L = ['🗂 <b>' + CLUB.short + ' 창립행사 준비</b>', UI_LINE];
-  if (charter) L.push('🗓 창립행사일 ' + charter + '  <b>' + prepDday_(today, charter).replace(/^오늘$/, 'D-DAY') + '</b>');
+  if (charter) L.push('🗓 창립행사일 ' + charter + (where ? ' ' + escapeHtml_(where) : '') + '  <b>' + prepDday_(today, charter).replace(/^오늘$/, 'D-DAY') + '</b>');
   L.push('진행 <b>' + done + '</b> / ' + items.length + '  ' + recruitBar_(done, Math.max(1, items.length)));
   if (late.length) { L.push('', '🔴 <b>기한 지남 ' + late.length + '건</b>'); late.forEach(function (x) { L.push(prepLine_(x, today)); }); }
   if (soon.length) { L.push('', '🟡 <b>이번 주 기한 ' + soon.length + '건</b>'); soon.forEach(function (x) { L.push(prepLine_(x, today)); }); }
@@ -94,6 +94,8 @@ function prepAllText_(items, today) {
 }
 
 // ── 시트 접근 + 명령 ─────────────────────────────────────────
+/** 설정 탭의 창립총회 시간·장소를 한 줄로(없으면 '') */
+function prepWhere_() { return [setting_('창립총회_시간', ''), setting_('창립총회_장소', '')].filter(Boolean).join(' · '); }
 function prepSheet_() { return getOrCreateSheet_(getSS_(), PREP_SHEET, PREP_HEADERS); }
 function prepItems_() { return prepParse_(prepSheet_().getDataRange().getValues()); }
 
@@ -113,7 +115,7 @@ function prepSeedIfEmpty_() {
 function prepReply_(chat, text) {
   var all = /\s(all|전체)\s*$/i.test(' ' + String(text || '').replace(/^\/\S+/, '')), items = prepItems_(), today = todayStr_();
   if (!items.length) { tgSend_(chat.id, '🗂 준비 항목이 아직 없습니다. 관리자가 초안을 채우거나 시트 「준비」 탭에 직접 적어 주세요.'); return; }
-  tgSend_(chat.id, all ? prepAllText_(items, today) : prepSummaryText_(items, today, recruitCharterDate_()));
+  tgSend_(chat.id, all ? prepAllText_(items, today) : prepSummaryText_(items, today, recruitCharterDate_(), prepWhere_()));
 }
 
 /** /done 3 7 · /undo 3 — 번호로 완료 표시/되돌리기 */
@@ -145,7 +147,7 @@ function prepDailyIfDue_() {
   if (!urgent && !monday) return;
   var targets = roomsWithFeature_(rooms_(), 'prep');
   if (!targets.length) return;
-  var body = prepSummaryText_(items, today, recruitCharterDate_());
+  var body = prepSummaryText_(items, today, recruitCharterDate_(), prepWhere_());
   targets.forEach(function (r) { tgSend_(r.chatId, body); });
   props_().setProperty('PREP_DAILY_LAST', today);
 }
