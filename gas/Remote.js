@@ -559,3 +559,10 @@ function remoteRosterFill(colTitle, pairs, afterTitle, overwrite) {
   SpreadsheetApp.flush();
   return out;
 }
+
+/** 명단 시트의 머리글 목록(값은 안 읽음). 열을 새로 만들기 전에 이미 있는 열을 확인하는 용도 */
+function remoteRosterHeaders() {
+  var id = getProp_('RECRUIT_SHEET_ID', true), ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0];
+  var lay = recruitAhoLayout_(sh.getDataRange().getValues());
+  return { headerRow: lay.headerRow, headers: sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(function (v) { return String(v || '').trim(); }) };
+}
