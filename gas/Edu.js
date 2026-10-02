@@ -165,6 +165,26 @@ function eduHandleCallback_(cq, user, m) {
 }
 
 // ── 초안 가져오기(원격): 교육자료 엑셀 「교육과정(초안)」 탭 → 「교육과정」 탭 (비어 있을 때만) ──
+/**
+ * 회차의 영상 연결(clasp run 용). 새 주소를 '영상링크'에 넣고, 기존 영상링크는 '보조영상' 맨 앞으로 밀어 보존한다(잃는 링크 없음).
+ *   remoteEduSetVideo('11', 'https://drive.google.com/file/d/…/view')             — 본 영상 교체
+ *   remoteEduSetVideo('10', url, ['https://…차기회장', 'https://…부회장'])          — 본 영상 + 보조 영상 앞에 추가
+ */
+function remoteEduSetVideo(no, url, extras) {
+  if (typeof extras === 'string') extras = JSON.parse(extras);
+  var s = eduFind_(no);
+  if (!s) return { error: '없는 회차: ' + no };
+  var sh = eduSheet_(), head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (h) { return String(h).replace(/\s+/g, ''); });
+  var cUrl = head.indexOf('영상링크') + 1, cExtra = head.indexOf('보조영상') + 1;
+  if (!cUrl || !cExtra) return { error: '영상링크/보조영상 열이 없습니다.' };
+  var list = [], seen = {};
+  [].concat(extras || [], s.url && s.url !== url ? [s.url] : [], s.extra).forEach(function (u) { u = String(u).trim(); if (u && u !== url && !seen[u]) { seen[u] = true; list.push(u); } });
+  sh.getRange(s.row, cUrl).setNumberFormat('@').setValue(url);
+  sh.getRange(s.row, cExtra).setNumberFormat('@').setValue(list.join('\n'));
+  try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '교육 영상 연결', s.no + '회차 ' + s.topic, s.url, url, 'clasp run'); } catch (e) {}
+  return { no: s.no, topic: s.topic, before: s.url, url: url, extras: list };
+}
+
 function remoteEduImport() {
   var sh = eduSheet_();
   if (sh.getLastRow() > 1) return { skipped: '교육과정 탭에 이미 ' + (sh.getLastRow() - 1) + '줄이 있습니다.' };

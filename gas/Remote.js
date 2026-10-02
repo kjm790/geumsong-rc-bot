@@ -77,6 +77,19 @@ function remotePostGuide(type) {
 /** 준비 체크리스트 초안 채우기(「준비」 탭이 비어 있을 때만). 반환=채운 줄 수 */
 function remotePrepSeed() { var n = prepSeedIfEmpty_(); if (n) audit_({ userId: '', name: '(원격) 개발자', role: '' }, '준비 체크리스트 초안', PREP_SHEET, '', n + '항목', 'clasp run'); return { seeded: n, total: prepItems_().length }; }
 
+/** 파일을 '링크가 있는 모든 사용자 보기'로 연다(공유드라이브 파일, Drive API). ids=파일 ID 배열. 반환: id별 결과 */
+function remoteShareAnyone(ids) {
+  if (typeof ids === 'string') ids = JSON.parse(ids);
+  return ids.map(function (id) {
+    var res = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + id + '/permissions?supportsAllDrives=true', {
+      method: 'post', contentType: 'application/json', payload: JSON.stringify({ role: 'reader', type: 'anyone' }),
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    var ok = res.getResponseCode() === 200;
+    if (ok) try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '파일 링크 공개', id, '', 'anyone/reader', 'clasp run'); } catch (e) {}
+    return { id: id, ok: ok, code: res.getResponseCode(), error: ok ? undefined : String(res.getContentText()).slice(0, 200) };
+  });
+}
+
 function remoteErrors(n) { return remoteTail_(ERRORS_SHEET, ERRORS_HEADERS, n); }
 function remoteLog(n) { return remoteTail_(AUDIT_SHEET, AUDIT_HEADERS, n); }
 
