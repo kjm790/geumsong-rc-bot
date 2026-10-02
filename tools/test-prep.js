@@ -49,4 +49,13 @@ assert.strictEqual(J(calls), J(['prep', 'done:/done 3 7', 'undo:/undo 3', 'prep'
 say(2, 555, '/done 3'); assert.ok(sent[0].indexOf('권한이 필요') !== -1, '참관은 완료 표시 불가');
 say(3, 222, '/prep'); assert.ok(sent[0].indexOf('이 방에서는') !== -1, '동호회 방에서는 불가');
 
+// 자동 알림: 설정 '준비_알림' 이 FALSE 면 쉬고, 비어 있거나 TRUE 면 prep 방(회장단·임원)으로 보낸다
+var flag = '';
+ctx.settingsMap_ = function () { return { '준비_알림': flag }; };
+ctx.prepItems_ = function () { return items; }; ctx.todayStr_ = function () { return today; };
+ctx.recruitCharterDate_ = function () { return '2026-10-14'; }; ctx.prepWhere_ = function () { return ''; };
+sent = []; ctx.prepDailyIfDue_(); assert.strictEqual(sent.length, 2, '빈 값 = 보냄(기존 동작 유지)');
+flag = 'FALSE'; sent = []; ctx.prepDailyIfDue_(); assert.strictEqual(sent.length, 0, 'FALSE = 자동 알림 없음');
+flag = 'TRUE'; sent = []; ctx.prepDailyIfDue_(); assert.strictEqual(sent.length, 2, 'TRUE = 보냄');
+
 console.log('✅ test-prep 통과 (' + dir + ')\n\n' + sum);

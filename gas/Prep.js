@@ -136,8 +136,10 @@ function prepMarkReply_(chat, user, text, done) {
   tgSend_(chat.id, L.join('\n') + '\n' + UI_LINE + '\n진행 <b>' + cnt + '</b> / ' + after.length + '  ' + recruitBar_(cnt, Math.max(1, after.length)));
 }
 
-/** 매일 1회(dailyCheck): 기한 지남·3일 이내가 있으면 알림, 월요일은 항상 요약. 미완료가 없으면 조용히 */
+/** 매일 1회(dailyCheck): 기한 지남·3일 이내가 있으면 알림, 월요일은 항상 요약. 미완료가 없으면 조용히.
+ *  설정 '준비_알림' 이 FALSE 면 자동 알림만 쉰다(/prep 조회·/done 은 그대로) — 준비를 사람이 주관하는 동안 봇이 재촉하지 않게 */
 function prepDailyIfDue_() {
+  if (!settingBool_('준비_알림', true)) return;
   var today = todayStr_();
   if (props_().getProperty('PREP_DAILY_LAST') === today) return;
   var items; try { items = prepItems_(); } catch (e) { return; }
