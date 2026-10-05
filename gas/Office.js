@@ -79,6 +79,7 @@ function officeHandleMessage_(msg) {
     docsBegin_(chat, du, dr, trig);
     return;
   }
+  if (!text && chat.type !== 'private' && intakePhotoPick_(msg)) { intakePhotoMessage_(msg); return; }   // 그룹방의 사진 — 양식 캡션·회원 사진
   if (!text) return;
   var isCmd = text.charAt(0) === '/', cmd = isCmd ? text.split(/\s+/)[0].split('@')[0].toLowerCase() : '';
   if (cmd === '/id') { officeCmdId_(chat, from); return; }  // 예외: 등록에 필요한 본인 id 확인은 누구나
@@ -92,7 +93,9 @@ function officeHandleMessage_(msg) {
   if (!isCmd) {
     if (eduMaybeAnswer_(chat, user, text)) return;         // 개인 대화창에서 교육 확인질문에 답하는 중이면 그 답으로 기록
     if (!intakeLooksLikeForm_(text)) return;
-    if (can_(user, 'roster.add') && roomAllows_(rooms, chat, 'intake')) intakeHandle_(chat, user, text);   // 예비회원 추천 양식 → 명단 기재
+    if (!can_(user, 'roster.add')) return;
+    if (roomAllows_(rooms, chat, 'intake')) intakeHandle_(chat, user, text);   // 예비회원 추천 양식 → 명단 기재
+    else if (roomFind_(rooms, chat.id)) tgSend_(chat.id, INTAKE_WRONG_ROOM);    // 접수 방이 아님 — 침묵 대신 안내
     return;
   }
   if (cmd === '/setroom' || cmd === '/방등록') { if (requireCap_(chat, user, '*')) officeCmdSetRoom_(chat, user, text); return; }

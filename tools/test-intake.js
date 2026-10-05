@@ -66,6 +66,7 @@ ctx.authUsers_ = function () { return users; };
 ctx.CacheService = { getScriptCache: function () { return { get: function () { return null; }, put: function () {}, remove: function () {} }; } };
 ctx.rooms_ = function () { return [{ chatId: '1', name: '회장단방', type: '회장단' }, { chatId: '2', name: '임원방', type: '임원' }]; };
 var got = []; ctx.intakeHandle_ = function (c, u, t) { got.push(u.name); };
+ctx.tgSend_ = function () {};
 var say = function (uid, text) { ctx.officeHandleMessage_({ chat: { id: 1, type: 'group' }, from: { id: uid }, text: text }); };
 say(222, filled); say(555, filled); say(999, filled); say(222, '그냥 대화입니다');
 assert.strictEqual(J(got), J(['가회장']));
@@ -73,5 +74,36 @@ ctx.officeHandleMessage_({ chat: { id: 2, type: 'group' }, from: { id: 222 }, te
 assert.strictEqual(got.length, 1, '임원방에 올린 양식은 기재하지 않음(개인정보는 회장단 방에서만)');
 ctx.officeHandleMessage_({ chat: { id: 222, type: 'private' }, from: { id: 222 }, text: filled });
 assert.strictEqual(got.length, 2, '1:1 로 보낸 양식은 기재');
+ctx.officeHandleMessage_({ chat: { id: 1, type: 'group' }, from: { id: 222 }, photo: [{ file_id: 'p', file_unique_id: 'pu' }], caption: filled });
+assert.strictEqual(got.length, 3, '사진 설명글(캡션)로 올린 양식도 기재');
+ctx.officeHandleMessage_({ chat: { id: 1, type: 'group' }, from: { id: 222 }, photo: [{ file_id: 'p', file_unique_id: 'pu' }], caption: '신입 회원 사진입니다' });
+assert.strictEqual(got.length, 3, '양식이 아닌 사진 설명글은 무시');
+
+// 사진 주인 정하기: 양식 다음에 온 사진 → 그 사람, 사진이 먼저면 보관, 설명글 성명, 접수 방이 아니면 안내만
+var pk = ctx.intakePhotoPick_({ photo: [{ file_id: 's', width: 90 }, { file_id: 'm', width: 320 }, { file_id: 'l', width: 1280 }] });
+assert.strictEqual(J(pk), J({ big: 'l', thumb: 'm' }), '원본=가장 큰 것, 시트용=160px 이상 중 가장 작은 것');
+assert.ok(ctx.intakePhotoPick_({ text: '글' }) === null && ctx.intakePhotoPick_({ document: { file_id: 'd', mime_type: 'application/pdf' } }) === null);
+var store = {}, attached = [], sent = [];
+ctx.CacheService = { getScriptCache: function () { return { get: function (k) { return store[k] || null; }, put: function (k, v) { store[k] = v; }, remove: function (k) { delete store[k]; } }; } };
+ctx.intakePhotoAttach_ = function (name, ph) { attached.push(name + ':' + ph.big); return { ok: name !== '없는이', text: name }; };
+ctx.tgSend_ = function (id, t) { sent.push(t); };
+var photoMsg = function (chatId, fid, extra) { var m = { chat: { id: chatId, type: 'group' }, from: { id: 222 }, photo: [{ file_id: fid, width: 320 }] }; Object.keys(extra || {}).forEach(function (k) { m[k] = extra[k]; }); return m; };
+store['intk_last_1_222'] = '홍길순';
+ctx.officeHandleMessage_(photoMsg(1, 'a'));
+assert.ok(J(attached) === J(['홍길순:a']) && !store['intk_last_1_222'], '양식 다음 사진 → 그 사람, 한 번 쓰면 대기 해제');
+ctx.officeHandleMessage_(photoMsg(1, 'b'));
+assert.ok(attached.length === 1 && JSON.parse(store['intk_pend_1_222']).big === 'b', '양식 없이 온 사진은 붙이지 않고 잠시 보관');
+ctx.officeHandleMessage_(photoMsg(1, 'c', { caption: '청하 홍길순 사진' }));
+assert.strictEqual(attached[1], '홍길순:c', '설명글의 성명(아호 무시)');
+sent.length = 0; ctx.officeHandleMessage_(photoMsg(1, 'd', { caption: '없는이' }));
+assert.strictEqual(sent.length, 0, '설명글이 명단에 없는 말이면 조용히');
+ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: filled } }));
+assert.strictEqual(attached.length, 3, '2명짜리 양식에 답장한 사진은 주인을 알 수 없어 넣지 않음');
+ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: '1. 성명 : 김둘째\n2. 성별 : 여\n3. 출생년도 : 1979' } }));
+assert.strictEqual(attached[3], '김둘째:e', '양식 글에 답장으로 올린 사진');
+var before = attached.length; sent.length = 0;
+ctx.officeHandleMessage_(photoMsg(2, 'f')); ctx.officeHandleMessage_(photoMsg(2, 'g', { caption: filled }));
+ctx.officeHandleMessage_({ chat: { id: 2, type: 'group' }, from: { id: 222 }, text: filled });
+assert.ok(attached.length === before && got.length === 3 && sent.length === 2 && sent[0].indexOf('회장단 방') !== -1, '임원방: 기재·사진 저장 없이 안내만');
 
 console.log('✅ test-intake 통과 (' + dir + ')\n\n' + line.replace(/<[^>]+>/g, ''));

@@ -130,7 +130,7 @@ function intakeConfirmLine_(no, p, flags) {
 }
 
 // ── 시트 기록 ────────────────────────────────────────────────
-function intakeHandle_(chat, user, text) {
+function intakeHandle_(chat, user, text, photo) {
   var people = intakeParse_(text);
   if (!people.length) return;
   var id = getProp_('RECRUIT_SHEET_ID', false);
@@ -160,7 +160,110 @@ function intakeHandle_(chat, user, text) {
   } catch (e) {
     lines.push('⚠️ 기재 중 오류: ' + escapeHtml_(e.message));
   } finally { lock.releaseLock(); }
+  // 사진: 같이 올린 사진(캡션 양식) 또는 조금 전에 올려 둔 사진을 붙인다. 없으면 '곧 올라올 사진'을 기다린다.
+  var cache = CacheService.getScriptCache(), key = intakePhotoKey_(chat, user);
+  if (people.length === 1) {
+    var ph = photo, pend = photo ? null : cache.get('intk_pend_' + key);
+    if (pend) { try { ph = JSON.parse(pend); } catch (e2) {} cache.remove('intk_pend_' + key); }
+    if (ph) lines.push(intakePhotoAttach_(people[0].name, ph, user).text);
+    else if (chat.type !== 'private') { cache.put('intk_last_' + key, people[0].name, INTAKE_PHOTO_WAIT_SEC); lines.push('📷 사진은 이어서 이 방에 올리시면 명단에 함께 들어갑니다(10분 안).'); }
+  } else if (photo) lines.push('📷 여러 명을 한 번에 올리면 사진 주인을 알 수 없습니다 — 사진 설명글에 성명만 적어 한 장씩 올려 주세요.');
   tgSend_(chat.id, '🌱 <b>예비회원 추천 접수</b> (올린 분: ' + escapeHtml_(user.name) + ')\n' + UI_LINE + '\n' + lines.join('\n'));
+}
+
+// ── 회원 사진: 회장단 방에 올린 사진 → 회원사진 폴더 저장 + 명단 「사진」 칸 ─────────
+var INTAKE_PHOTO_WAIT_SEC = 600;
+var INTAKE_WRONG_ROOM = '🔒 예비회원 추천 양식은 개인정보 보호를 위해 <b>회장단 방</b>(또는 봇과의 개인 대화창)에서만 접수합니다.\n회장단 방에 다시 올려 주시고, 이 방에 올린 글은 지워 주세요.';
+function intakePhotoKey_(chat, user) { return chat.id + '_' + user.userId; }
+
+/** 메시지의 사진(순수). 반환 {big: 원본 file_id, thumb: 시트용 작은 크기 file_id} 또는 null. 파일로 보낸 그림도 인정 */
+function intakePhotoPick_(m) {
+  if (!m) return null;
+  if (m.photo && m.photo.length) {
+    var t = m.photo[m.photo.length - 1];
+    for (var i = 0; i < m.photo.length; i++) if ((m.photo[i].width || 0) >= 160) { t = m.photo[i]; break; }
+    return { big: m.photo[m.photo.length - 1].file_id, thumb: t.file_id };
+  }
+  var d = m.document;
+  if (d && /^image\//.test(d.mime_type || '')) { var th = d.thumbnail || d.thumb; return { big: d.file_id, thumb: th ? th.file_id : d.file_id }; }
+  return null;
+}
+
+/**
+ * 그룹방에 올라온 사진 처리. 누구 사진인지 정하는 순서:
+ *  ① 설명글이 추천 양식 → 기재 + 그 사람 사진  ② 양식 글에 답장으로 올린 사진  ③ 설명글이 성명('홍길순' · '아호 홍길순' · '홍길순 사진')
+ *  ④ 설명글 없음 → 방금(10분 안) 같은 사람이 올린 양식의 주인. 그런 양식이 없으면 잠시 보관했다가 뒤따라 오는 양식에 붙인다.
+ */
+function intakePhotoMessage_(msg) {
+  var chat = msg.chat, ph = intakePhotoPick_(msg), cap = String(msg.caption || '').trim(), re = msg.reply_to_message || {};
+  var user = authUser_(msg.from.id);
+  if (!user || !can_(user, 'roster.add')) return;
+  var rooms = []; try { rooms = rooms_(); } catch (e) {}
+  if (!roomAllows_(rooms, chat, 'intake')) { if (intakeLooksLikeForm_(cap) && roomFind_(rooms, chat.id)) tgSend_(chat.id, INTAKE_WRONG_ROOM); return; }
+  if (intakeLooksLikeForm_(cap)) { intakeHandle_(chat, user, cap, ph); return; }
+
+  var cache = CacheService.getScriptCache(), key = intakePhotoKey_(chat, user), name = '', quiet = false;
+  if (intakeLooksLikeForm_(re.text || re.caption)) {
+    var ps = intakeParse_(re.text || re.caption);
+    if (ps.length !== 1) return;
+    name = ps[0].name;
+  } else if (cap) {
+    var t = cap.replace(/사진|님/g, ' ').trim();
+    if (!t || t.length > 12 || t.split(/\s+/).length > 2) return;   // 이름으로 보이지 않는 설명글 — 일반 사진
+    name = recruitNameOf_(t); quiet = true;
+  } else {
+    name = cache.get('intk_last_' + key) || '';
+    if (!name) { cache.put('intk_pend_' + key, JSON.stringify(ph), INTAKE_PHOTO_WAIT_SEC); return; }
+    cache.remove('intk_last_' + key);
+  }
+  var res = intakePhotoAttach_(name, ph, user);
+  if (res.ok || !quiet) tgSend_(chat.id, res.text);
+}
+
+/** 사진을 회원사진 폴더(원본 성명.jpg · 시트용 썸네일)에 저장하고 명단 「사진」 칸에 넣는다. 반환 {ok, text} */
+function intakePhotoAttach_(name, ph, user) {
+  try {
+    var id = getProp_('RECRUIT_SHEET_ID', false);
+    if (!id) return { ok: false, text: '⚠️ 명단 시트가 아직 연결되지 않았습니다.' };
+    var ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(recruitConf_().tab) || ss.getSheets()[0], values = sh.getDataRange().getValues();
+    var plan = recruitStatusPlan_(values, [name], '(이름 찾기 전용)');
+    if (plan.ambiguous.length) return { ok: false, text: '📷 <b>' + escapeHtml_(name) + '</b> — 같은 이름이 둘 이상이라 사진을 넣지 않았습니다. 시트에서 직접 넣어 주세요.' };
+    if (plan.notFound.length) return { ok: false, text: '📷 <b>' + escapeHtml_(name) + '</b> — 명단에 없는 이름이라 사진을 넣지 않았습니다.' };
+    var row = (plan.changes[0] || {}).row;
+    if (!row) return { ok: false, text: '📷 <b>' + escapeHtml_(name) + '</b> — 명단에서 줄을 찾지 못했습니다.' };
+
+    var sub = function (parent, n) { var it = parent.getFoldersByName(n); return it.hasNext() ? it.next() : parent.createFolder(n); };
+    var photos = sub(sub(DriveApp.getFolderById(getProp_('DRIVE_FOLDER_ID', true)), '02_회원명부·가입신청서'), '회원사진'), thumbs = sub(photos, '_썸네일(시트용)');
+    var stem = function (n) { return String(n).replace(/\.[A-Za-z0-9]{1,5}$/, '').replace(/\s+/g, ''); };
+    var olds = photos.getFiles(), replaced = false;
+    while (olds.hasNext()) { var o = olds.next(); if (stem(o.getName()) === name) { o.setName('(이전 ' + todayStr_() + ') ' + o.getName()); replaced = true; } }   // 원본은 지우지 않고 이름만 바꿔 둔다
+    var oldT = thumbs.getFiles();
+    while (oldT.hasNext()) { var ot = oldT.next(); if (stem(ot.getName()) === name) ot.setTrashed(true); }
+
+    var big = docsDownload_(ph.big), ext = /png/i.test(big.getContentType() || '') ? '.png' : '.jpg';
+    var url = photos.createFile(big.setName(name + ext)).getUrl();
+    var tb = ph.thumb && ph.thumb !== ph.big ? docsDownload_(ph.thumb) : big;
+    thumbs.createFile(tb.copyBlob().setName(name + '.jpg'));
+
+    var norm = function (s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); };
+    var lay = recruitAhoLayout_(values), col = sh.getRange(lay.headerRow, 1, 1, sh.getLastColumn()).getValues()[0].map(norm).indexOf('사진') + 1, how = '폴더에 저장';
+    if (col) {
+      var cell = sh.getRange(row, col), ctype = /png/i.test(tb.getContentType() || '') ? 'image/png' : 'image/jpeg';
+      try {
+        cell.setValue(SpreadsheetApp.newCellImage().setSourceUrl('data:' + ctype + ';base64,' + Utilities.base64Encode(tb.getBytes())).setAltTextTitle(name).setAltTextDescription(url).build());
+        how = '명단에 넣음';
+      } catch (e) {
+        cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText('사진 보기').setLinkUrl(url).build()); how = '명단에 링크로 넣음';
+      }
+      cell.setNote('원본 사진: ' + url).setHorizontalAlignment('center').setVerticalAlignment('middle');
+      try { sh.setRowHeight(row, 72); } catch (e2) {}
+      SpreadsheetApp.flush();
+    }
+    try { audit_(user, '회원 사진', name + ' (' + row + '행)', replaced ? '이전 사진 있음' : '', how, ''); } catch (e3) {}
+    return { ok: true, text: '📷 <b>' + escapeHtml_(name) + '</b> 님 사진 — ' + how + (replaced ? ' (이전 사진은 폴더에 보관)' : '') };
+  } catch (err) {
+    return { ok: false, text: '⚠️ 사진 넣기 오류: ' + escapeHtml_(err.message) };
+  }
 }
 
 function intakeFormText_() {
