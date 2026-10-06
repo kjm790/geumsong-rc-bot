@@ -9,9 +9,9 @@ vm.createContext(ctx);
 fs.readdirSync(dir).filter(function (f) { return /\.js$/.test(f); }).sort()
   .forEach(function (f) { vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f }); });
 
-var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고', '아호'];
+var H = ['번호', '성명', '성별', '출생년도', '생년월일', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고', '아호'];
 function row(no, name, job, ref, eng, status, role, mgr) {
-  return [no, name, '여', 1980, job, '가짜상사 / 대표', ref, '010-0000-0000', 'fake@example.com', eng, '', status, role, mgr, '', '', no === 1 ? '청향' : ''];
+  return [no, name, '여', 1980, '1980-07-07', job, '가짜상사 / 대표', ref, '010-0000-0000', 'fake@example.com', eng, '', status, role, mgr, '', '', no === 1 ? '청향' : ''];
 }
 var values = [
   ['대구금향 로타리 클럽(가칭) 예비회원 명단'], ['노란 칸에만 입력.'], ['총 인원', '', '확약'], [6, '', 3],
@@ -31,7 +31,7 @@ var p = ctx.recruitParse_(values);
 assert.strictEqual(p.rows.length, 6, '6명만 읽어야 함(빈 자리·아래 표 제외)');
 assert.strictEqual(p.missingCols.length, 0);   // (vm 경계 너머 객체는 deepStrictEqual 이 프로토타입 차이로 실패 → 값으로 비교)
 assert.strictEqual(p.rows[2].status, '검토중', "' 검토 중 ' → '검토중'");
-assert.ok(!JSON.stringify(p).match(/010-|example\.com|1980/), '연락처·이메일·출생년도는 읽어 들이지 않아야 함');
+assert.ok(!JSON.stringify(p).match(/010-|example\.com|1980|07-07/), '연락처·이메일·출생년도·생년월일은 읽어 들이지 않아야 함');
 
 var s = ctx.recruitSummary_(p.rows);
 assert.strictEqual(s.confirmed, 3); assert.strictEqual(s.byStatus['검토중'], 2); assert.strictEqual(s.byStatus['고민'], 1);
@@ -52,8 +52,8 @@ var ranked = ctx.recruitListText_([
 var order = ['회장님', '차기', '부회', '총무', '위원', '일반일', '일반이'].map(function (n) { return ranked.indexOf(' ' + n + (n.indexOf('일반') === 0 ? '' : ' —')); });
 assert.ok(order.every(function (x, i) { return x !== -1 && (i === 0 || x > order[i - 1]); }), '임원 서열순(회장→차기→부회장→총무→위원장) 뒤에 일반 회원은 시트 순: ' + ranked);
 assert.strictEqual(p.ahoMissing, false);
-var noAho = ctx.recruitParse_(values.map(function (r) { return r.slice(0, 16); }));
-assert.ok(noAho.ahoMissing && noAho.headerRow === 6 && noAho.width === 16 && noAho.missingCols.length === 0, '아호 열 없으면 17열에 추가 대상, 경고 열 목록엔 안 넣음');
+var noAho = ctx.recruitParse_(values.map(function (r) { return r.slice(0, 17); }));
+assert.ok(noAho.ahoMissing && noAho.headerRow === 6 && noAho.width === 17 && noAho.missingCols.length === 0, '아호 열 없으면 18열에 추가 대상, 경고 열 목록엔 안 넣음');
 assert.ok(list.indexOf('👑 회장') !== -1 && list.indexOf('🤝 회원위원장') !== -1, '직책 뱃지(회장·회원위원장)');
 var chk = ctx.recruitCheckText_(p);
 assert.ok(chk.indexOf('이름 중복') !== -1 && chk.indexOf('가나다=고민') !== -1 && chk.indexOf('영문명 미입력</b> 5명') !== -1, chk);
@@ -61,12 +61,12 @@ assert.strictEqual(ctx.attendRank_ && ctx.ATTEND_ROLE_RANK['회장'], 1);
 
 // 아호 열 위치·입력 파싱
 var layEnd = ctx.recruitAhoLayout_(values);
-assert.ok(layEnd.headerRow === 6 && layEnd.nameCol === 2 && layEnd.ahoCol === 17 && !layEnd.ok, '맨 오른쪽 아호 → 옮길 대상');
+assert.ok(layEnd.headerRow === 6 && layEnd.nameCol === 2 && layEnd.ahoCol === 18 && !layEnd.ok, '맨 오른쪽 아호 → 옮길 대상');
 assert.ok(ctx.recruitAhoLayout_([['번호', '아호', '성명']]).ok, '성명 바로 앞이면 그대로');
 assert.ok(ctx.recruitAhoLayout_([['번호', '성명']]).ahoCol === 0);
 assert.strictEqual(JSON.stringify(ctx.recruitAhoPairs_('/아호 가나다 청향, 라마바 다솜\n사아자 없음 ; 혼자')), JSON.stringify([['가나다', '청향'], ['라마바', '다솜'], ['사아자', '']]));
-var moved = values.map(function (r) { return r.length < 16 ? r : [r[0], r[16] || '', r[1]].concat(r.slice(2, 16)); });   // 아호를 성명 앞으로 옮긴 모양
-moved[5] = ['번호', '아호', '성명'].concat(H.slice(2, 16));
+var moved = values.map(function (r) { return r.length < 17 ? r : [r[0], r[17] || '', r[1]].concat(r.slice(2, 17)); });   // 아호를 성명 앞으로 옮긴 모양
+moved[5] = ['번호', '아호', '성명'].concat(H.slice(2, 17));
 var pm = ctx.recruitParse_(moved);
 assert.ok(pm.rows.length === 6 && pm.rows[0].aho === '청향' && pm.rows[0].name === '가나다' && pm.rows[1].job === '보험', '열을 옮겨도 제목 이름으로 똑같이 읽음');
 
@@ -83,7 +83,7 @@ assert.strictEqual(ctx.recruitSuggestButton_('aho', '한소연', '아주아주�
 // 직책 지정 계획
 var ALLOWED = ['회장', '차기회장', '부회장', '총무이사', '재무이사', '사찰이사', '회원위원장'];
 var rp = ctx.recruitRolePlan_(values, '사아자', ' 재무이사 ', ALLOWED);
-assert.ok(rp.row === 9 && rp.col === 13 && rp.before === '' && rp.after === '재무이사', JSON.stringify(rp));
+assert.ok(rp.row === 9 && rp.col === 14 && rp.before === '' && rp.after === '재무이사', JSON.stringify(rp));
 assert.ok(/이미 라마바 님/.test(ctx.recruitRolePlan_(values, '사아자', '총무이사', ALLOWED).error), '한 자리 한 명 — 이미 맡은 사람이 있으면 막음');
 assert.ok(/시트에 없는 직책/.test(ctx.recruitRolePlan_(values, '사아자', '대통령', ALLOWED).error), '드롭다운 목록 밖 값 거부');
 assert.strictEqual(ctx.recruitRolePlan_(values, '없는사람', '재무이사', ALLOWED).error, 'notfound');
@@ -94,7 +94,7 @@ assert.strictEqual(ctx.recruitRolePlan_(values, '차카타', '아무직책').aft
 
 // 확약여부 변경 계획
 var sp = ctx.recruitStatusPlan_(values, ['라마바', '사아자', ' 차카타 ', '가나다', '없는사람', '사아자'], '확약');
-assert.strictEqual(JSON.stringify(sp.changes.map(function (c) { return c.name + ':' + c.before + '@' + c.row + ',' + c.col; })), JSON.stringify(['사아자:검토중@9,12', '차카타:검토중@10,12']));
+assert.strictEqual(JSON.stringify(sp.changes.map(function (c) { return c.name + ':' + c.before + '@' + c.row + ',' + c.col; })), JSON.stringify(['사아자:검토중@9,13', '차카타:검토중@10,13']));
 assert.strictEqual(JSON.stringify([sp.same, sp.notFound, sp.ambiguous]), JSON.stringify([['라마바'], ['없는사람'], ['가나다']]), '이미 같은 상태·없는 이름·동명이인 구분, 중복 입력은 1회만');
 
 // 클럽별 서열: 금향은 DEI(6번)가 IT(7번)보다 앞

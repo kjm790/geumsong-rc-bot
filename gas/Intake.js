@@ -2,19 +2,20 @@
  * Intake.js — 그룹방에 올린 '예비회원 추천 양식' 글을 읽어 명단 시트에 자동 기재
  *
  *  - 양식(1. 성명 : … 11. 비고 : …)을 복사해 채워 올리면 봇이 인식한다. 한 메시지에 여러 명도 가능.
- *  - 글자 규칙(정규식)으로만 읽는다 — 연락처·이메일·생년을 AI(LLM)에 보내지 않는다.
+ *  - 글자 규칙(정규식)으로만 읽는다 — 연락처·이메일·생년월일을 AI(LLM)에 보내지 않는다.
+ *  - 3번 항목은 생년월일(2026-10-06부터). 날짜 전체는 「생년월일」 칸에, 연도는 「출생년도」 칸에 자동 기재. 연도만 적어도 받는다.
  *  - 명단 시트의 번호만 있고 성명이 빈 첫 줄에 기재(수식·드롭다운·요약 줄은 건드리지 않음). 빈 줄이 없으면 마지막 번호 아래에 줄 추가.
  *  - 중복(같은 이름+같은 연락처)은 기재하지 않고 알린다. 이름만 같으면 기재하되 '동명이인 확인' 표시.
  *  - 그룹방 확인 답장에는 연락처를 가려서 표시한다(텔레그램 대화 기록에 개인정보가 남지 않게).
  */
 var INTAKE_LABELS = [   // [내부 키, 양식 라벨 첫머리(공백·괄호 제거 후 비교)]
-  ['name', ['성명', '이름']], ['gender', ['성별']], ['birth', ['출생년도', '출생연도', '생년', '출생']],
+  ['name', ['성명', '이름']], ['gender', ['성별']], ['birth', ['생년월일', '생일', '출생년도', '출생연도', '생년', '출생']],
   ['job', ['직업', '업종']], ['company', ['회사명', '회사', '직장']], ['referrer', ['추천인', '추천']],
   ['phone', ['연락처', '전화', '휴대폰', '핸드폰']], ['email', ['이메일', '메일', 'email', 'e-mail']],
   ['eng', ['영문명', '영문', '영어이름']], ['aho', ['아호']], ['note', ['비고', '특이사항', '메모']]
 ];
 var INTAKE_SHEET_COLS = {   // 내부 키 → 명단 시트 열 제목(공백 무시 비교)
-  name: '성명', gender: '성별', birth: '출생년도', job: '직업분류', company: '회사/직위', referrer: '추천인',
+  name: '성명', gender: '성별', birth: '출생년도', birthDate: '생년월일', job: '직업분류', company: '회사/직위', referrer: '추천인',
   phone: '연락처', email: '이메일', eng: '영문명', aho: '아호', note: '비고', joinDate: '가입일', status: '확약여부'
 };
 
@@ -60,13 +61,34 @@ function intakeNormalize_(p) {
   o.name = o.name.replace(/\s+/g, '');
   if (/^(여|여성|여자|f|female)$/i.test(o.gender)) o.gender = '여';
   else if (/^(남|남성|남자|m|male)$/i.test(o.gender)) o.gender = '남';
-  var b = o.birth.replace(/[^\d]/g, '');
-  if (b.length >= 4) o.birth = b.slice(0, 4);
-  else if (b.length === 2) o.birth = String((+b > 30 ? 1900 : 2000) + +b);
+  var bd = intakeBirth_(o.birth); o.birth = bd.year; o.birthDate = bd.date;
   var d = o.phone.replace(/[^\d]/g, '');
   if (/^01\d{8,9}$/.test(d)) o.phone = d.slice(0, 3) + '-' + d.slice(3, d.length - 4) + '-' + d.slice(-4);
   o.eng = o.eng.toUpperCase();
   return o;
+}
+
+/**
+ * 생년월일 글 → {year:'1992', date:'1992-03-05'} (순수). 받는 모양: 1992-03-05 · 1992.3.5 · 1992년 3월 5일 · 19920305 · 92.03.05 · 920305 · 1992(연도만) · 82년생.
+ * 두 자리 연도는 30 이하면 2000년대. 날짜가 말이 안 되면(13월 등) 연도만 남긴다.
+ */
+function intakeBirth_(text) {
+  var t = String(text || '').trim(), out = { year: '', date: '' };
+  if (!t) return out;
+  var y2 = function (y) { return y.length === 2 ? String((+y > 30 ? 1900 : 2000) + +y) : y; };
+  var m = /^(\d{4}|\d{2})\s*[^\d]+\s*(\d{1,2})\s*[^\d]+\s*(\d{1,2})/.exec(t), y, mo, d;
+  if (m) { y = y2(m[1]); mo = +m[2]; d = +m[3]; }
+  else {
+    var digits = t.replace(/[^\d]/g, '');
+    if (digits.length === 8) { y = digits.slice(0, 4); mo = +digits.slice(4, 6); d = +digits.slice(6, 8); }
+    else if (digits.length === 6) { y = y2(digits.slice(0, 2)); mo = +digits.slice(2, 4); d = +digits.slice(4, 6); }
+    else if (digits.length >= 4) { out.year = digits.slice(0, 4); return out; }
+    else if (digits.length === 2) { out.year = y2(digits); return out; }
+    else return out;
+  }
+  out.year = y;
+  if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) out.date = y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
+  return out;
 }
 
 function intakeMaskPhone_(phone) {
@@ -109,6 +131,7 @@ function intakePlan_(values, person, today) {
   var writes = [], put = function (k, v) { if (col[k] !== undefined && v !== '' && v !== undefined) writes.push([col[k] + 1, v]); };
   ['name', 'gender', 'job', 'company', 'referrer', 'phone', 'email', 'eng'].forEach(function (k) { put(k, person[k]); });
   if (person.birth) put('birth', /^\d{4}$/.test(person.birth) ? +person.birth : person.birth);
+  put('birthDate', person.birthDate);                      // 「생년월일」 열이 있을 때만(글자 그대로 YYYY-MM-DD)
   put('joinDate', today);                                   // 호출한 쪽이 넘긴 가입일(빈 값이면 기재 안 함)
   put('status', '검토중');
   put('note', [person.note, homonym ? '동명이인 확인' : ''].filter(Boolean).join(' / '));
@@ -122,8 +145,8 @@ function intakeConfirmLine_(no, p, flags) {
   var miss = [];
   if (!p.eng) miss.push('영문명');
   if (!p.phone) miss.push('연락처');
-  if (!p.birth) miss.push('출생년도');
-  var bits = [p.gender, p.birth, p.job, p.company].filter(Boolean).map(escapeHtml_).join(' · ');
+  if (!p.birthDate) miss.push(p.birth ? '생년월일(연도만 있음)' : '생년월일');
+  var bits = [p.gender, p.birth ? p.birth + '년생' + (p.birthDate ? ' · 생년월일 ✓' : '') : '', p.job, p.company].filter(Boolean).map(escapeHtml_).join(' · ');
   return '✅ <b>' + no + '번 ' + escapeHtml_((p.aho ? p.aho + ' ' : '') + p.name) + '</b>' + (bits ? '\n   ' + bits : '') +
     '\n   추천인: ' + (p.referrer ? escapeHtml_(p.referrer) : '—') + (p.phone ? ' · 연락처 ' + intakeMaskPhone_(p.phone) : '') + (p.email ? ' · 이메일 ✓' : '') +
     (miss.length ? '\n   ❔ 미입력: ' + miss.join(', ') : '') + (flags && flags.homonym ? '\n   ⚠️ 같은 이름이 이미 있습니다 — 동명이인인지 확인해 주세요' : '');
@@ -267,7 +290,7 @@ function intakePhotoAttach_(name, ph, user) {
 }
 
 function intakeFormText_() {
-  return '■ 금향 예비회원 추천 양식\n(1명당 아래 내용을 복사해서 옆에 적어 주세요)\n\n1. 성명 :\n2. 성별 :\n3. 출생년도 :\n4. 직업(업종) :\n5. 회사명 / 직위 :\n6. 추천인 :\n' +
+  return '■ 금향 예비회원 추천 양식\n(1명당 아래 내용을 복사해서 옆에 적어 주세요)\n\n1. 성명 :\n2. 성별 :\n3. 생년월일(예 1992-03-05) :\n4. 직업(업종) :\n5. 회사명 / 직위 :\n6. 추천인 :\n' +
     '7. 연락처 :\n8. 이메일 :\n9. 영문명(여권 표기) :\n10. 아호(있으면) :\n11. 비고(특이사항) :';
 }
 

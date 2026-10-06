@@ -17,36 +17,43 @@ assert.ok(!ctx.intakeLooksLikeForm_('오늘 회의 몇 시죠?\n장소 : 미정'
 assert.ok(!ctx.intakeLooksLikeForm_('성명 : 홍길동'), '항목 3개 미만은 양식 아님');
 
 var filled = '■ 금향 예비회원 추천 양식\n(1명당 아래 내용을 복사해서 옆에 적어 주세요)\n\n' +
-  '1. 성명 : 홍 길순\n2. 성별 : 여성\n3. 출생년도 : 82년생\n4. 직업(업종) : 요식업\n5. 회사명 / 직위 : 가짜식당 / 대표\n6. 추천인 : 가나다\n' +
+  '1. 성명 : 홍 길순\n2. 성별 : 여성\n3. 생년월일(예 1992-03-05) : 82.3.5\n4. 직업(업종) : 요식업\n5. 회사명 / 직위 : 가짜식당 / 대표\n6. 추천인 : 가나다\n' +
   '7. 연락처 : 01012345678\n8. 이메일 : fake@example.com\n9. 영문명(여권 표기) : hong gil soon\n10. 아호(있으면) : 없음\n11. 비고(특이사항) : 10월 초 확답 예정\n\n' +
-  '1. 성명：김둘째\n2. 성별： 여\n3. 출생년도： 1979\n4. 직업(업종)： 교육\n7. 연락처： 010-2222-3333\n10. 아호(있으면)： 청향\n';
+  '1. 성명：김둘째\n2. 성별： 여\n3. 생년월일： 1979\n4. 직업(업종)： 교육\n7. 연락처： 010-2222-3333\n10. 아호(있으면)： 청향\n';
 var ps = ctx.intakeParse_(filled);
 assert.strictEqual(ps.length, 2, '한 메시지에 2명');
 assert.strictEqual(J([ps[0].name, ps[0].gender, ps[0].birth, ps[0].phone, ps[0].eng, ps[0].aho]), J(['홍길순', '여', '1982', '010-1234-5678', 'HONG GIL SOON', '']));
+assert.strictEqual(ps[0].birthDate, '1982-03-05', '두 자리 연도 생년월일');
+assert.strictEqual(ps[1].birthDate, '', '연도만 적으면 생년월일은 비움');
+[['1992-03-05', '1992', '1992-03-05'], ['1992.3.5', '1992', '1992-03-05'], ['1992년 3월 5일', '1992', '1992-03-05'], ['19920305', '1992', '1992-03-05'], ['920305', '1992', '1992-03-05'],
+ ['1992', '1992', ''], ['82년생', '1982', ''], ['1992-13-05', '1992', ''], ['', '', ''], ['-', '', '']].forEach(function (c) {
+  var b = ctx.intakeBirth_(c[0]); assert.strictEqual(J([b.year, b.date]), J([c[1], c[2]]), '생년월일 해석: ' + c[0]);
+});
 assert.strictEqual(J([ps[1].name, ps[1].birth, ps[1].aho, ps[1].phone]), J(['김둘째', '1979', '청향', '010-2222-3333']), '전각 콜론(：)도 인식');
 assert.strictEqual(ctx.intakeMaskPhone_('010-1234-5678'), '010-****-5678');
 
 // 실제 시트와 같은 모양: 안내 줄 + 6행 제목 + 번호만 있는 빈 자리
-var H = ['번호', '성명', '성별', '출생년도', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고'];
+var H = ['번호', '성명', '성별', '출생년도', '생년월일', '직업분류', '회사 / 직위', '추천인', '연락처', '이메일', '영문명', '가입일', '확약여부', '창립회기 직책', '담당 관리위원', '예비모임 참석', '비고'];
 var sheet = [['예비회원 명단'], ['안내'], ['총 인원'], [2], ['창립 목표일'], H,
-  [1, '가나다', '여', 1980, '의료', '', '', '010-1111-2222', '', '', '', '확약', '회장', '', '', ''],
-  [2, '홍길순', '여', 1982, '요식업', '', '', '010-9999-0000', '', '', '', '검토중', '', '', '', ''],
-  [3, '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''], [4], [5]];
+  [1, '가나다', '여', 1980, '1980-01-02', '의료', '', '', '010-1111-2222', '', '', '', '확약', '회장', '', '', ''],
+  [2, '홍길순', '여', 1982, '', '요식업', '', '', '010-9999-0000', '', '', '', '검토중', '', '', '', ''],
+  [3, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''], [4], [5]];
 var plan = ctx.intakePlan_(sheet, ps[1], '2026-09-19');
 assert.strictEqual(plan.dupRow, null); assert.strictEqual(plan.targetRow, 9, '번호 3의 빈 줄(9행)에 기재');
-assert.ok(plan.needAhoCol && plan.ahoCol === 17, '아호 열이 없으면 맨 오른쪽(17열)에 추가');
+assert.ok(plan.needAhoCol && plan.ahoCol === 18, '아호 열이 없으면 맨 오른쪽(18열)에 추가');
 var w = {}; plan.writes.forEach(function (x) { w[x[0]] = x[1]; });
-assert.strictEqual(w[2], '김둘째'); assert.strictEqual(w[4], 1979); assert.strictEqual(w[8], '010-2222-3333');
-assert.strictEqual(w[11], '2026-09-19', '가입일(호출한 쪽이 넘긴 날짜)');
+assert.strictEqual(w[2], '김둘째'); assert.strictEqual(w[4], 1979); assert.ok(!(5 in w), '연도만 적으면 생년월일 칸은 비워 둠'); assert.strictEqual(w[9], '010-2222-3333');
+assert.strictEqual(w[12], '2026-09-19', '가입일(호출한 쪽이 넘긴 날짜)');
 assert.strictEqual(ctx.recruitJoinDateOf_('2026-09-21', '2026-10-14'), '2026-10-14', '창립행사 전 접수 → 창립행사일');
 assert.strictEqual(ctx.recruitJoinDateOf_('2026-11-02', '2026-10-14'), '2026-11-02', '창립행사 뒤 접수 → 접수일');
 assert.strictEqual(ctx.recruitJoinDateOf_('2026-09-21', ''), '', '창립행사일 미정이면 비워 둠');
-assert.ok(!ctx.intakePlan_(sheet, ps[1], '').writes.some(function (x) { return x[0] === 11; }), '가입일이 빈 값이면 그 칸은 쓰지 않음'); assert.strictEqual(w[12], '검토중'); assert.strictEqual(w[17], '청향');
-assert.ok(!(13 in w) && !(14 in w), '직책·담당 관리위원은 건드리지 않음');
+assert.ok(!ctx.intakePlan_(sheet, ps[1], '').writes.some(function (x) { return x[0] === 12; }), '가입일이 빈 값이면 그 칸은 쓰지 않음'); assert.strictEqual(w[13], '검토중'); assert.strictEqual(w[18], '청향');
+assert.ok(!(14 in w) && !(15 in w), '직책·담당 관리위원은 건드리지 않음');
 
 var homo = ctx.intakePlan_(sheet, ps[0], '2026-09-19');     // 같은 이름, 다른 연락처
 assert.ok(homo.dupRow === null && homo.homonym, '이름만 같으면 동명이인으로 기재');
-assert.ok(homo.writes.some(function (x) { return x[0] === 16 && String(x[1]).indexOf('동명이인 확인') !== -1; }));
+assert.ok(homo.writes.some(function (x) { return x[0] === 17 && String(x[1]).indexOf('동명이인 확인') !== -1; }));
+assert.ok(homo.writes.some(function (x) { return x[0] === 5 && x[1] === '1982-03-05'; }), '생년월일 칸에 날짜 전체 기재');
 var dup = ctx.intakePlan_(sheet, ctx.intakeNormalize_({ name: '홍길순', phone: '010 9999 0000' }), '2026-09-19');
 assert.strictEqual(dup.dupRow, 8, '이름+연락처 같으면 중복(8행)');
 var dup2 = ctx.intakePlan_(sheet, ctx.intakeNormalize_({ name: '가나다' }), '2026-09-19');
@@ -58,6 +65,9 @@ assert.ok(ins.targetRow === null && ins.insertAfterRow === 8 && ins.no === 3);
 
 var line = ctx.intakeConfirmLine_(3, ps[0], { homonym: true });
 assert.ok(line.indexOf('010-****-5678') !== -1 && line.indexOf('01012345678') === -1 && line.indexOf('fake@example.com') === -1, '답장에 연락처 원문·이메일 주소 없음');
+assert.ok(line.indexOf('1982년생 · 생년월일 ✓') !== -1 && line.indexOf('1982-03-05') === -1, '답장에는 연도만(생년월일 원문 없음)');
+assert.ok(ctx.intakeConfirmLine_(4, ps[1], {}).indexOf('생년월일(연도만 있음)') !== -1, '연도만 있으면 미입력 안내');
+assert.ok(ctx.intakeFormText_().indexOf('3. 생년월일') !== -1 && ctx.intakeParse_(ctx.intakeFormText_()).length === 0, '양식 글 자체는 기재 대상 0명');
 assert.ok(line.indexOf('동명이인') !== -1 && line.indexOf('이메일 ✓') !== -1);
 
 // 라우터: 등록된 임원만 기재, 참관·미등록은 무시
@@ -99,7 +109,7 @@ sent.length = 0; ctx.officeHandleMessage_(photoMsg(1, 'd', { caption: '없는이
 assert.strictEqual(sent.length, 0, '설명글이 명단에 없는 말이면 조용히');
 ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: filled } }));
 assert.strictEqual(attached.length, 3, '2명짜리 양식에 답장한 사진은 주인을 알 수 없어 넣지 않음');
-ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: '1. 성명 : 김둘째\n2. 성별 : 여\n3. 출생년도 : 1979' } }));
+ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: '1. 성명 : 김둘째\n2. 성별 : 여\n3. 생년월일 : 1979-05-05' } }));
 assert.strictEqual(attached[3], '김둘째:e', '양식 글에 답장으로 올린 사진');
 var before = attached.length; sent.length = 0;
 ctx.officeHandleMessage_(photoMsg(2, 'f')); ctx.officeHandleMessage_(photoMsg(2, 'g', { caption: filled }));
