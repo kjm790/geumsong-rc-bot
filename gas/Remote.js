@@ -87,7 +87,35 @@ function remotePostForm(types) {
       : '↑ 눌러서 복사 → 내용을 채운 양식은 개인정보 보호를 위해 <b>회장단 방</b> 또는 <b>봇과의 개인 대화창</b>에 올려 주세요(이 방에 올리면 기재되지 않습니다). 다시 보려면 /form';
     var res = tgSend_(r.chatId, body + tail);
     try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '양식 게시', r.name, '', r.type, 'clasp run'); } catch (e) {}
-    return { room: r.name, type: r.type, ok: !!(res && res.ok), error: res && !res.ok ? res.description : undefined };
+    return { room: r.name, type: r.type, ok: !!(res && res.ok), messageId: res && res.result ? res.result.message_id : undefined, error: res && !res.ok ? res.description : undefined };
+  });
+}
+
+/**
+ * 방에 봇이 올린 '예비회원 추천 양식' 글 가운데 최신 keep개만 남기고 지운다(기본 1개).
+ * 봇은 자기 글 목록을 못 받으므로: 알림 없는 탐침 글로 현재 번호를 알아낸 뒤(바로 삭제), 그 아래 번호를 하나씩 관리자 개인 대화창으로
+ * '전달'해 내용·보낸이를 확인하고(전달본은 즉시 삭제) 봇이 올린 양식 글만 고른다. 남의 글은 건드리지 않는다. back=거슬러 볼 최대 개수.
+ */
+function remoteFormCleanup(types, keep, back) {
+  if (typeof types === 'string') types = JSON.parse(types);
+  keep = keep === undefined ? 1 : +keep; back = back || 40;
+  var admin = String(getProp_('ADMIN_IDS', true)).split(/[,\s]+/)[0];
+  return rooms_().filter(function (r) { return types.indexOf(r.type) !== -1; }).map(function (r) {
+    var probe = tgApi_('sendMessage', { chat_id: r.chatId, text: '.', disable_notification: true });
+    if (!probe.ok) return { room: r.name, error: probe.description };
+    var top = probe.result.message_id; tgApi_('deleteMessage', { chat_id: r.chatId, message_id: top });
+    var found = [], seen = 0;
+    for (var id = top - 1; id > 0 && seen < back; id--, seen++) {
+      var f = tgApi_('forwardMessage', { chat_id: admin, from_chat_id: r.chatId, message_id: id, disable_notification: true });
+      if (!f.ok) continue;
+      var m = f.result, o = m.forward_origin || {}, byBot = o.type === 'user' && o.sender_user && o.sender_user.is_bot;
+      tgApi_('deleteMessage', { chat_id: admin, message_id: m.message_id });
+      if (byBot && /예비회원 추천 양식/.test(m.text || '')) found.push(id);
+    }
+    var del = found.slice(keep), deleted = [];
+    del.forEach(function (id) { var d = tgApi_('deleteMessage', { chat_id: r.chatId, message_id: id }); if (d.ok) deleted.push(id); });
+    try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '양식 글 정리', r.name, found.join(','), '삭제 ' + deleted.join(','), 'clasp run'); } catch (e) {}
+    return { room: r.name, top: top, formPosts: found, kept: found.slice(0, keep), deleted: deleted };
   });
 }
 
