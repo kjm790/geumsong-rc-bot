@@ -146,6 +146,7 @@ function intakeConfirmLine_(no, p, flags) {
   var miss = [];
   if (!p.eng) miss.push('영문명');
   if (!p.phone) miss.push('연락처');
+  if (!p.addrWork && !p.addrHome) miss.push('주소(우편물 수령지)');
   if (!p.birthDate) miss.push(p.birth ? '생년월일(연도만 있음)' : '생년월일');
   var bits = [p.gender, p.birth ? p.birth + '년생' + (p.birthDate ? ' · 생년월일 ✓' : '') : '', p.job, p.company].filter(Boolean).map(escapeHtml_).join(' · ');
   return '✅ <b>' + no + '번 ' + escapeHtml_((p.aho ? p.aho + ' ' : '') + p.name) + '</b>' + (bits ? '\n   ' + bits : '') +
@@ -292,7 +293,7 @@ function intakePhotoAttach_(name, ph, user) {
 
 function intakeFormText_() {
   return '■ 금향 예비회원 추천 양식\n(1명당 아래 내용을 복사해서 옆에 적어 주세요)\n\n1. 성명 :\n2. 성별 :\n3. 생년월일(예 1992-03-05) :\n4. 직업(업종) :\n5. 회사명 / 직위 :\n6. 추천인 :\n' +
-    '7. 연락처 :\n8. 이메일 :\n9. 영문명(여권 표기) :\n10. 사업장 주소 :\n11. 자택 주소 :\n12. 아호(있으면) :\n13. 비고(특이사항) :';
+    '7. 연락처 :\n8. 이메일 :\n9. 영문명(여권 표기) :\n10. 사업장 주소 :\n11. 자택 주소 :\n    (주소는 둘 중 우편물 받으실 곳 하나만 적으셔도 됩니다)\n12. 아호(있으면) :\n13. 비고(특이사항) :';
 }
 
 // ── 사용자 등록: 상대 메시지에 '답장'으로 /adduser 권한 [성명] ─────────

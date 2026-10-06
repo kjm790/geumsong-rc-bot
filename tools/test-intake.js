@@ -71,6 +71,8 @@ assert.ok(line.indexOf('010-****-5678') !== -1 && line.indexOf('01012345678') ==
 assert.ok(line.indexOf('1982년생 · 생년월일 ✓') !== -1 && line.indexOf('1982-03-05') === -1, '답장에는 연도만(생년월일 원문 없음)');
 assert.ok(line.indexOf('주소 ✓') !== -1 && line.indexOf('가짜로') === -1, '답장에 주소 원문 없음');
 assert.ok(ctx.intakeConfirmLine_(4, ps[1], {}).indexOf('생년월일(연도만 있음)') !== -1, '연도만 있으면 미입력 안내');
+assert.ok(ctx.intakeConfirmLine_(4, ps[1], {}).indexOf('주소(우편물 수령지)') === -1 && ctx.intakeConfirmLine_(5, ctx.intakeNormalize_({ name: '무주소' }), {}).indexOf('주소(우편물 수령지)') !== -1, '주소가 하나라도 있으면 미입력 아님');
+assert.ok(ctx.intakeFormText_().indexOf('우편물 받으실 곳 하나만') !== -1 && ctx.intakeParse_(ctx.intakeFormText_()).length === 0, '양식 안내 줄(콜론 없음)은 항목으로 읽지 않음');
 assert.ok(ctx.intakeFormText_().indexOf('3. 생년월일') !== -1 && ctx.intakeParse_(ctx.intakeFormText_()).length === 0, '양식 글 자체는 기재 대상 0명');
 assert.ok(line.indexOf('동명이인') !== -1 && line.indexOf('이메일 ✓') !== -1);
 

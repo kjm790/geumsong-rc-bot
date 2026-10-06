@@ -80,7 +80,7 @@ function remotePostGuide(type) {
  */
 function remotePostForm(types) {
   if (typeof types === 'string') types = JSON.parse(types);
-  var body = '📋 <b>예비회원 추천 양식</b> (2026-10-06 개정: 3번 생년월일, 10·11번 주소 추가)\n\n<code>' + escapeHtml_(intakeFormText_()) + '</code>\n\n';
+  var body = '📋 <b>예비회원 추천 양식</b> (2026-10-06 개정: 3번 생년월일, 10·11번 주소 — 우편물 받으실 곳 하나만)\n\n<code>' + escapeHtml_(intakeFormText_()) + '</code>\n\n';
   return rooms_().filter(function (r) { return types.indexOf(r.type) !== -1; }).map(function (r) {
     var intake = ROOM_TYPES[r.type].feats.indexOf('intake') !== -1;
     var tail = intake ? '↑ 눌러서 복사 → 내용을 채워 이 방에 올리면 명단에 자동 기재됩니다. (여러 명은 양식을 이어 붙이세요)'
