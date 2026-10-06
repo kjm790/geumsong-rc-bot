@@ -1,7 +1,7 @@
 /**
  * Intake.js — 그룹방에 올린 '예비회원 추천 양식' 글을 읽어 명단 시트에 자동 기재
  *
- *  - 양식(1. 성명 : … 11. 비고 : …)을 복사해 채워 올리면 봇이 인식한다. 한 메시지에 여러 명도 가능.
+ *  - 양식(1. 성명 : … 13. 비고 : …)을 복사해 채워 올리면 봇이 인식한다. 한 메시지에 여러 명도 가능.
  *  - 글자 규칙(정규식)으로만 읽는다 — 연락처·이메일·생년월일을 AI(LLM)에 보내지 않는다.
  *  - 3번 항목은 생년월일(2026-10-06부터). 날짜 전체는 「생년월일」 칸에, 연도는 「출생년도」 칸에 자동 기재. 연도만 적어도 받는다.
  *  - 명단 시트의 번호만 있고 성명이 빈 첫 줄에 기재(수식·드롭다운·요약 줄은 건드리지 않음). 빈 줄이 없으면 마지막 번호 아래에 줄 추가.
@@ -10,13 +10,14 @@
  */
 var INTAKE_LABELS = [   // [내부 키, 양식 라벨 첫머리(공백·괄호 제거 후 비교)]
   ['name', ['성명', '이름']], ['gender', ['성별']], ['birth', ['생년월일', '생일', '출생년도', '출생연도', '생년', '출생']],
+  ['addrWork', ['사업장주소', '사업장', '회사주소', '직장주소', '근무지']], ['addrHome', ['자택주소', '자택', '집주소', '거주지', '주소']],
   ['job', ['직업', '업종']], ['company', ['회사명', '회사', '직장']], ['referrer', ['추천인', '추천']],
   ['phone', ['연락처', '전화', '휴대폰', '핸드폰']], ['email', ['이메일', '메일', 'email', 'e-mail']],
   ['eng', ['영문명', '영문', '영어이름']], ['aho', ['아호']], ['note', ['비고', '특이사항', '메모']]
 ];
 var INTAKE_SHEET_COLS = {   // 내부 키 → 명단 시트 열 제목(공백 무시 비교)
   name: '성명', gender: '성별', birth: '출생년도', birthDate: '생년월일', job: '직업분류', company: '회사/직위', referrer: '추천인',
-  phone: '연락처', email: '이메일', eng: '영문명', aho: '아호', note: '비고', joinDate: '가입일', status: '확약여부'
+  phone: '연락처', email: '이메일', addrWork: '사업장주소', addrHome: '자택주소', eng: '영문명', aho: '아호', note: '비고', joinDate: '가입일', status: '확약여부'
 };
 
 function intakeLabelKey_(label) {
@@ -129,7 +130,7 @@ function intakePlan_(values, person, today) {
   var needAhoCol = col.aho === undefined && !!person.aho;
   var ahoCol = col.aho !== undefined ? col.aho : head.length;       // 없으면 맨 오른쪽에 새 열
   var writes = [], put = function (k, v) { if (col[k] !== undefined && v !== '' && v !== undefined) writes.push([col[k] + 1, v]); };
-  ['name', 'gender', 'job', 'company', 'referrer', 'phone', 'email', 'eng'].forEach(function (k) { put(k, person[k]); });
+  ['name', 'gender', 'job', 'company', 'referrer', 'phone', 'email', 'addrWork', 'addrHome', 'eng'].forEach(function (k) { put(k, person[k]); });
   if (person.birth) put('birth', /^\d{4}$/.test(person.birth) ? +person.birth : person.birth);
   put('birthDate', person.birthDate);                      // 「생년월일」 열이 있을 때만(글자 그대로 YYYY-MM-DD)
   put('joinDate', today);                                   // 호출한 쪽이 넘긴 가입일(빈 값이면 기재 안 함)
@@ -148,7 +149,7 @@ function intakeConfirmLine_(no, p, flags) {
   if (!p.birthDate) miss.push(p.birth ? '생년월일(연도만 있음)' : '생년월일');
   var bits = [p.gender, p.birth ? p.birth + '년생' + (p.birthDate ? ' · 생년월일 ✓' : '') : '', p.job, p.company].filter(Boolean).map(escapeHtml_).join(' · ');
   return '✅ <b>' + no + '번 ' + escapeHtml_((p.aho ? p.aho + ' ' : '') + p.name) + '</b>' + (bits ? '\n   ' + bits : '') +
-    '\n   추천인: ' + (p.referrer ? escapeHtml_(p.referrer) : '—') + (p.phone ? ' · 연락처 ' + intakeMaskPhone_(p.phone) : '') + (p.email ? ' · 이메일 ✓' : '') +
+    '\n   추천인: ' + (p.referrer ? escapeHtml_(p.referrer) : '—') + (p.phone ? ' · 연락처 ' + intakeMaskPhone_(p.phone) : '') + (p.email ? ' · 이메일 ✓' : '') + (p.addrWork || p.addrHome ? ' · 주소 ✓' : '') +
     (miss.length ? '\n   ❔ 미입력: ' + miss.join(', ') : '') + (flags && flags.homonym ? '\n   ⚠️ 같은 이름이 이미 있습니다 — 동명이인인지 확인해 주세요' : '');
 }
 
@@ -291,7 +292,7 @@ function intakePhotoAttach_(name, ph, user) {
 
 function intakeFormText_() {
   return '■ 금향 예비회원 추천 양식\n(1명당 아래 내용을 복사해서 옆에 적어 주세요)\n\n1. 성명 :\n2. 성별 :\n3. 생년월일(예 1992-03-05) :\n4. 직업(업종) :\n5. 회사명 / 직위 :\n6. 추천인 :\n' +
-    '7. 연락처 :\n8. 이메일 :\n9. 영문명(여권 표기) :\n10. 아호(있으면) :\n11. 비고(특이사항) :';
+    '7. 연락처 :\n8. 이메일 :\n9. 영문명(여권 표기) :\n10. 사업장 주소 :\n11. 자택 주소 :\n12. 아호(있으면) :\n13. 비고(특이사항) :';
 }
 
 // ── 사용자 등록: 상대 메시지에 '답장'으로 /adduser 권한 [성명] ─────────

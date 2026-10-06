@@ -74,6 +74,23 @@ function remotePostGuide(type) {
   });
 }
 
+/**
+ * 등록된 방 가운데 types(예: ['회장단','임원'])의 방에 예비회원 추천 양식을 올린다(실제 텔레그램 전송).
+ * 접수(intake) 기능이 없는 방(임원·동호회)에는 "채운 양식은 회장단 방 또는 봇 개인 대화창에" 안내를 붙인다.
+ */
+function remotePostForm(types) {
+  if (typeof types === 'string') types = JSON.parse(types);
+  var body = '📋 <b>예비회원 추천 양식</b> (2026-10-06 개정: 3번 생년월일, 10·11번 주소 추가)\n\n<code>' + escapeHtml_(intakeFormText_()) + '</code>\n\n';
+  return rooms_().filter(function (r) { return types.indexOf(r.type) !== -1; }).map(function (r) {
+    var intake = ROOM_TYPES[r.type].feats.indexOf('intake') !== -1;
+    var tail = intake ? '↑ 눌러서 복사 → 내용을 채워 이 방에 올리면 명단에 자동 기재됩니다. (여러 명은 양식을 이어 붙이세요)'
+      : '↑ 눌러서 복사 → 내용을 채운 양식은 개인정보 보호를 위해 <b>회장단 방</b> 또는 <b>봇과의 개인 대화창</b>에 올려 주세요(이 방에 올리면 기재되지 않습니다). 다시 보려면 /form';
+    var res = tgSend_(r.chatId, body + tail);
+    try { audit_({ userId: '', name: '(원격) 개발자', role: '' }, '양식 게시', r.name, '', r.type, 'clasp run'); } catch (e) {}
+    return { room: r.name, type: r.type, ok: !!(res && res.ok), error: res && !res.ok ? res.description : undefined };
+  });
+}
+
 /** 준비 체크리스트 초안 채우기(「준비」 탭이 비어 있을 때만). 반환=채운 줄 수 */
 function remotePrepSeed() { var n = prepSeedIfEmpty_(); if (n) audit_({ userId: '', name: '(원격) 개발자', role: '' }, '준비 체크리스트 초안', PREP_SHEET, '', n + '항목', 'clasp run'); return { seeded: n, total: prepItems_().length }; }
 
