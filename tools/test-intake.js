@@ -117,6 +117,23 @@ ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: filled } }
 assert.strictEqual(attached.length, 3, '2명짜리 양식에 답장한 사진은 주인을 알 수 없어 넣지 않음');
 ctx.officeHandleMessage_(photoMsg(1, 'e', { reply_to_message: { text: '1. 성명 : 김둘째\n2. 성별 : 여\n3. 생년월일 : 1979-05-05' } }));
 assert.strictEqual(attached[3], '김둘째:e', '양식 글에 답장으로 올린 사진');
+// 사진을 먼저 올린 뒤 글로 주인 정하기: 사진에 답장으로 성명 / 같은 사람이 이어서 '성명 사진'
+var textMsg = function (chatId, text, extra) { var m = { chat: { id: chatId, type: 'group' }, from: { id: 222 }, text: text }; Object.keys(extra || {}).forEach(function (k) { m[k] = extra[k]; }); return m; };
+var n0 = attached.length; sent.length = 0;
+ctx.officeHandleMessage_(textMsg(1, '홍길순', { reply_to_message: { from: { id: 333 }, photo: [{ file_id: 'r', width: 320 }] } }));
+assert.strictEqual(attached[n0], '홍길순:r', '사진에 답장으로 성명 → 그 사진');
+ctx.officeHandleMessage_(textMsg(1, '오늘 모임 사진 잘 나왔네요 감사합니다', { reply_to_message: { from: { id: 333 }, photo: [{ file_id: 'r2', width: 320 }] } }));
+assert.strictEqual(attached.length, n0 + 1, '이름이 아닌 답글은 일반 대화');
+delete store['intk_pend_1_222']; ctx.officeHandleMessage_(photoMsg(1, 'h'));
+assert.ok(store['intk_pend_1_222'], '설명글 없는 사진은 보관');
+ctx.officeHandleMessage_(textMsg(1, '김둘째 사진'));
+assert.ok(attached[n0 + 1] === '김둘째:h' && !store['intk_pend_1_222'], '사진 다음 「성명 사진」 글 → 보관해 둔 사진, 보관 해제');
+sent.length = 0; ctx.officeHandleMessage_(textMsg(1, '없는이 사진'));
+assert.strictEqual(attached.length, n0 + 2, '보관 사진이 없으면 짧은 글은 일반 대화');
+ctx.officeHandleMessage_(photoMsg(1, 'i')); sent.length = 0; ctx.officeHandleMessage_(textMsg(1, '없는이 사진'));
+assert.ok(attached[n0 + 2] === '없는이:i' && sent.length === 1, '「…사진」이라고 적었는데 명단에 없으면 이유를 알려 줌');
+ctx.officeHandleMessage_(photoMsg(1, 'j')); sent.length = 0; ctx.officeHandleMessage_(textMsg(1, '없는이'));
+assert.ok(sent.length === 0, '성명만 적었는데 명단에 없으면 조용히(일반 대화일 수 있음)');
 var before = attached.length; sent.length = 0;
 ctx.officeHandleMessage_(photoMsg(2, 'f')); ctx.officeHandleMessage_(photoMsg(2, 'g', { caption: filled }));
 ctx.officeHandleMessage_({ chat: { id: 2, type: 'group' }, from: { id: 222 }, text: filled });

@@ -233,9 +233,9 @@ function intakePhotoMessage_(msg) {
     if (ps.length !== 1) return;
     name = ps[0].name;
   } else if (cap) {
-    var t = cap.replace(/사진|님/g, ' ').trim();
-    if (!t || t.length > 12 || t.split(/\s+/).length > 2) return;   // 이름으로 보이지 않는 설명글 — 일반 사진
-    name = recruitNameOf_(t); quiet = true;
+    name = intakeNameText_(cap);
+    if (!name) return;                                              // 이름으로 보이지 않는 설명글 — 일반 사진
+    quiet = true;
   } else {
     name = cache.get('intk_last_' + key) || '';
     if (!name) { cache.put('intk_pend_' + key, JSON.stringify(ph), INTAKE_PHOTO_WAIT_SEC); return; }
@@ -243,6 +243,39 @@ function intakePhotoMessage_(msg) {
   }
   var res = intakePhotoAttach_(name, ph, user);
   if (res.ok || !quiet) tgSend_(chat.id, res.text);
+}
+
+/** 설명글·답글이 성명으로 보이면 명단 이름('홍길순' · '아호 홍길순' · '홍길순 사진' · '홍길순 님'), 아니면 '' */
+function intakeNameText_(s) {
+  var t = String(s || '').replace(/사진|님/g, ' ').trim();
+  if (!t || t.length > 12 || t.split(/\s+/).length > 2) return '';
+  return recruitNameOf_(t);
+}
+
+/**
+ * 그룹방의 글로 사진 주인 정하기(사진을 먼저 올린 뒤). 두 가지:
+ *  ① 올라온 사진에 <b>답장</b>으로 성명  ② 사진을 올린 사람이 10분 안에 이어서 '홍길순 사진'처럼 성명 글
+ * 사진 글이 아니거나 이름으로 보이지 않으면 false(일반 대화). 처리했으면 true.
+ */
+function intakePhotoByText_(msg) {
+  var text = String(msg.text || '').trim(), name = intakeNameText_(text);
+  if (!name) return false;
+  var chat = msg.chat, re = msg.reply_to_message, ph = intakePhotoPick_(re), pendKey = '';
+  if (ph) { if (re.from) pendKey = 'intk_pend_' + chat.id + '_' + re.from.id; }
+  else {
+    pendKey = 'intk_pend_' + chat.id + '_' + msg.from.id;
+    var raw = null;
+    try { raw = CacheService.getScriptCache().get(pendKey); ph = raw ? JSON.parse(raw) : null; } catch (e) { ph = null; }
+    if (!ph) return false;                                          // 최근 사진이 없는 짧은 글 — 일반 대화
+  }
+  var user = authUser_(msg.from.id);
+  if (!user || !can_(user, 'roster.add')) return true;
+  var rooms = []; try { rooms = rooms_(); } catch (e2) {}
+  if (!roomAllows_(rooms, chat, 'intake')) return true;
+  var res = intakePhotoAttach_(name, ph, user);
+  if (res.ok && pendKey) { try { CacheService.getScriptCache().remove(pendKey); } catch (e3) {} }   // 붙인 사진은 뒤따르는 양식에 또 붙지 않게
+  if (res.ok || /사진/.test(text)) tgSend_(chat.id, res.text);      // '…사진'이라고 분명히 적었으면 못 넣은 이유도 알려 준다
+  return true;
 }
 
 /** 사진을 회원사진 폴더(원본 성명.jpg · 시트용 썸네일)에 저장하고 명단 「사진」 칸에 넣는다. 반환 {ok, text} */

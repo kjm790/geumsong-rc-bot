@@ -83,6 +83,7 @@ function officeHandleMessage_(msg) {
   if (!text) return;
   var isCmd = text.charAt(0) === '/', cmd = isCmd ? text.split(/\s+/)[0].split('@')[0].toLowerCase() : '';
   if (cmd === '/id') { officeCmdId_(chat, from); return; }  // 예외: 등록에 필요한 본인 id 확인은 누구나
+  if (!isCmd && chat.type !== 'private' && intakePhotoByText_(msg)) return;   // 사진에 답장·사진 다음 글로 성명 → 회원 사진
   if (!isCmd && !intakeLooksLikeForm_(text) && chat.type !== 'private') return;   // 그룹의 일반 대화 — 시트를 읽지 않고 바로 끝
 
   var user = authUser_(from.id);
